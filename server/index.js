@@ -102,14 +102,184 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       return { value };
     };
 
+    const extractUniversity = (fullText) => {
+      const KEYWORDS = [
+        'UNIVERSITY',
+        'INSTITUTE',
+        'COLLEGE',
+        'SCHOOL'
+      ];
+
+      const lines = fullText
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .slice(0, 12); // ONLY top part
+
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const line of lines) {
+        // Skip numeric-heavy lines
+        if (/\d/.test(line)) continue;
+        if (line.length < 10) continue;
+
+        let score = 0;
+
+        // Keyword matching
+        for (const keyword of KEYWORDS) {
+          if (line.toUpperCase().includes(keyword)) {
+            score += 5;
+          }
+        }
+
+        // Length heuristic
+        score += Math.min(line.length / 10, 5);
+
+        // Capitalization heuristic
+        if (line === line.toUpperCase()) score += 2;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = line;
+        }
+      }
+
+      return bestMatch ? { value: bestMatch } : null;
+    };
+
+    const extractCourse = (fullText) => {
+
+      const DEGREE_KEYWORDS = [
+        'BACHELOR',
+        'BACHELORS',
+        'MASTER',
+        'MASTERS',
+        'B\\.TECH',
+        'M\\.TECH',
+        'BTECH',
+        'MTECH',
+        'ENGINEERING',
+        'SCIENCE',
+        'ARTS',
+        'COMMERCE',
+        'MBA',
+        'MCA',
+        'BCA',
+        'PHD',
+        'DOCTORATE',
+        'DIPLOMA'
+      ];
+
+
+      const lines = fullText
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean);
+
+      for (const line of lines) {
+        for (const keyword of DEGREE_KEYWORDS) {
+          const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+          if (regex.test(line)) {
+            // Reject false positives
+            if (line.length < 15) continue;
+            return { value: line };
+          }
+        }
+      }
+
+      return null;
+    };
+
+    const extractAdmissionYear = (fullText) => {
+      const YEAR_REGEX = /\b(19|20)\d{2}\b/;
+
+      const KEYWORDS = [
+        'ADMISSION YEAR',
+        'YEAR OF ADMISSION',
+        'ADMITTED',
+        'ENROLLED'
+      ];
+
+      const lines = fullText.split('\n');
+
+      for (const line of lines) {
+        const upper = line.toUpperCase();
+
+        if (KEYWORDS.some(k => upper.includes(k))) {
+          const match = line.match(YEAR_REGEX);
+          if (match) {
+            return { value: match[0] };
+          }
+        }
+      }
+
+      return null;
+    };
+
+    const extractPassingYear = (fullText) => {
+      const YEAR_REGEX = /\b(19|20)\d{2}\b/g;
+
+      const KEYWORDS = [
+        { key: 'PASS', score: 5 },
+        { key: 'PASSED', score: 5 },
+        { key: 'RESULT', score: 4 },
+        { key: 'EXAMINATION', score: 4 },
+        { key: 'EXAM', score: 3 },
+        { key: 'DECLARED', score: 3 },
+        { key: 'FINAL', score: 3 },
+        { key: 'GRADUATED', score: 5 }
+      ];
+
+      let bestYear = null;
+      let bestScore = 0;
+
+      const lines = fullText.split('\n');
+
+      for (const line of lines) {
+        // ❌ Skip admission-related lines
+        if (/ADMISSION|ADMITTED|ENROLLED/i.test(line)) continue;
+
+        const years = line.match(YEAR_REGEX);
+        if (!years) continue;
+
+        for (const year of years) {
+          let score = 1;
+
+          for (const k of KEYWORDS) {
+            if (line.toUpperCase().includes(k.key)) {
+              score += k.score;
+            }
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestYear = year;
+          }
+        }
+      }
+
+      return bestYear ? { value: bestYear } : null;
+    };
+
+
+
     const sgpaData = extractGPA('SGPA');
     const cgpaData = extractGPA('CGPA');
+    const universityName = extractUniversity(fullText);
+    const courseName = extractCourse(fullText);
+    const admissionYr = extractAdmissionYear(fullText);
+    const passingYr = extractPassingYear(fullText);
 
     return res.json({
       success: 'Text extracted successfully!',
       data: fullText,
       sgpaData,
-      cgpaData
+      cgpaData,
+      universityName,
+      courseName,
+      admissionYr,
+      passingYr
     });
 
   } catch (err) {
