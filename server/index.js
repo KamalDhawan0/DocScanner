@@ -262,6 +262,59 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       return bestYear ? { value: bestYear } : null;
     };
 
+    const extractPAN = (fullText) => {
+      if (!fullText) return null;
+
+      const text = fullText.toUpperCase();
+
+      // ✅ PAN-specific keywords (MANDATORY)
+      const panKeywords = [
+        'PERMANENT ACCOUNT NUMBER',
+        'PAN CARD',
+        'INCOME TAX DEPARTMENT'
+      ];
+
+      // Check if any PAN keyword exists
+      const hasPanKeyword = panKeywords.some(keyword =>
+        text.includes(keyword)
+      );
+
+      if (!hasPanKeyword) {
+        // 🚫 Prevent false PAN detection from marksheets
+        return null;
+      }
+
+      // Normalize text
+      const normalizedText = text.replace(/[^A-Z0-9]/g, ' ');
+
+      // PAN regex
+      const PAN_REGEX = /\b[A-Z]{5}[0-9]{4}[A-Z]\b/g;
+      const matches = normalizedText.match(PAN_REGEX);
+
+      if (!matches) return null;
+
+      return {
+        value: matches[0],
+        confidence: 'HIGH'
+      };
+    };
+
+    const extractNumberAfterGender = (text) => {
+      if (!text) return null;
+
+      const normalizedText = text.toUpperCase();
+
+      const regex = /(?:MALE|FEMALE)\s*[\r\n]+([0-9 ]{10,20})/;
+      const match = normalizedText.match(regex);
+
+      if (!match) return null;
+
+      return match[1].trim();
+    };
+
+
+
+
 
 
     const sgpaData = extractGPA('SGPA');
@@ -270,6 +323,8 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
     const courseName = extractCourse(fullText);
     const admissionYr = extractAdmissionYear(fullText);
     const passingYr = extractPassingYear(fullText);
+    const panData = extractPAN(fullText);
+    const genderNumber = extractNumberAfterGender(fullText);
 
     return res.json({
       success: 'Text extracted successfully!',
@@ -279,7 +334,9 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       universityName,
       courseName,
       admissionYr,
-      passingYr
+      passingYr,
+      panData,
+      genderNumber
     });
 
   } catch (err) {
