@@ -324,7 +324,7 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
     const admissionYr = extractAdmissionYear(fullText);
     const passingYr = extractPassingYear(fullText);
     const panData = extractPAN(fullText);
-    const genderNumber = extractNumberAfterGender(fullText);
+    const adhaarNumber = extractNumberAfterGender(fullText);
 
     return res.json({
       success: 'Text extracted successfully!',
@@ -336,7 +336,7 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       admissionYr,
       passingYr,
       panData,
-      genderNumber
+      adhaarNumber
     });
 
   } catch (err) {

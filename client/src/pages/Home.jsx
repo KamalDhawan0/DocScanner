@@ -12,7 +12,7 @@ function Home() {
   const [admissionYearData, setAdmissionYearData] = useState(null);
   const [passingYearData, setPassingYearData] = useState(null);
   const [panData, setPanData] = useState(null);
-  const [genderNumber, setGenderNumber] = useState(null);
+  const [adhaarNum, setAdhaarNum] = useState(null);
 
   const [data, setData] = useState("");
 
@@ -52,7 +52,7 @@ function Home() {
       setAdmissionYearData(result.admissionYr || null);
       setPassingYearData(result.passingYr || null);
       setPanData(result.panData || null);
-      setGenderNumber(result.genderNumber || null);
+      setAdhaarNum(result.adhaarNumber || null);
       setData(result.data || "");
     } catch (err) {
       setError("Server error. Please try again.");
@@ -91,11 +91,11 @@ function Home() {
 
       <div className="gpa-container">
 
-        {/* 1️⃣ Gender Mode */}
-        {genderNumber ? (
+        {/* 1️⃣ Adhaar */}
+        {adhaarNum ? (
           <div className="gpa-box">
             <div className="gpa-label">Adhaar Card Number</div>
-            <p className="gpa-value">{genderNumber}</p>
+            <p className="gpa-value">{adhaarNum}</p>
           </div>
 
         ) : panData ? (
