@@ -3,8 +3,13 @@ import "../App.css";
 
 function Home() {
   const [file, setFile] = useState(null);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [documentType, setDocumentType] = useState(null);
+  const [isValid, setIsValid] = useState(false);
+
   const [sgpaData, setSgpaData] = useState(null);
   const [cgpaData, setCgpaData] = useState(null);
   const [universityData, setUniversityData] = useState(null);
@@ -13,9 +18,31 @@ function Home() {
   const [passingYearData, setPassingYearData] = useState(null);
   const [panData, setPanData] = useState(null);
   const [adhaarNum, setAdhaarNum] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const [data, setData] = useState("");
 
+  const [rawText, setRawText] = useState("");
+
+  /* ---------------- RESET STATE ---------------- */
+  const resetState = () => {
+    setError("");
+    setSuccess("");
+    setDocumentType(null);
+    setIsValid(false);
+
+    setSgpaData(null);
+    setCgpaData(null);
+    setUniversityData(null);
+    setCourseData(null);
+    setAdmissionYearData(null);
+    setPassingYearData(null);
+    setPanData(null);
+    setAdhaarNum(null);
+
+    setRawText("");
+  };
+
+  /* ---------------- SUBMIT ---------------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -26,6 +53,7 @@ function Home() {
 
     setError("");
     setSuccess("");
+    setLoading(true);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -43,8 +71,9 @@ function Home() {
         return;
       }
 
+      setDocumentType(result.documentType);
+      setIsValid(result.isValid);
 
-      setSuccess(result.success || "Transcript analyzed successfully");
       setSgpaData(result.sgpaData || null);
       setCgpaData(result.cgpaData || null);
       setUniversityData(result.universityName || null);
@@ -53,154 +82,160 @@ function Home() {
       setPassingYearData(result.passingYr || null);
       setPanData(result.panData || null);
       setAdhaarNum(result.adhaarNumber || null);
-      setData(result.data || "");
+      setRawText(result.data || "");
+
+      setSuccess("Document scanned successfully");
     } catch (err) {
       setError("Server error. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  /* ---------------- UI ---------------- */
   return (
-    <div className="container">
-      <h1>📄 Transcript Analyzer</h1>
-      <p>Upload a clear image.</p>
+    <div className="container dark">
+      <h1 className="title">📄 Document Analyzer</h1>
+      <p className="subtitle">
+        Upload Aadhaar, PAN, or Marksheet to verify & extract details
+      </p>
 
-      <form onSubmit={handleSubmit} encType="multipart/form-data">
-        <label>
-          <strong>Step 1:</strong> Select Transcript Image
-        </label>
-        <br />
-        <br />
+      <form onSubmit={handleSubmit} encType="multipart/form-data" className="upload-box">
         <input
           type="file"
           accept="image/*,.pdf"
           required
-          onChange={(e) => setFile(e.target.files[0])}
+          onChange={(e) => {
+            resetState();
+            setFile(e.target.files[0]);
+          }}
         />
-        <br />
-        <br />
-        <button type="submit">Analyze Transcript</button>
+        <button type="submit">Scan Document</button>
       </form>
 
+      {/* STATUS MESSAGES */}
       {error && (
-        <div className="error">
-          <strong>Error:</strong> {error}
+        <div className="alert error">
+          ❌ {error}
         </div>
       )}
 
-      {success && <div className="success">✅ {success}</div>}
-
-      <div className="gpa-container">
-
-        {/* 1️⃣ Adhaar */}
-        {adhaarNum ? (
-          <div className="gpa-box">
-            <div className="gpa-label">Adhaar Card Number</div>
-            <p className="gpa-value">{adhaarNum}</p>
-          </div>
-
-        ) : panData ? (
-          /* 2️⃣ PAN Mode */
-          <div className="gpa-box">
-            <div className="gpa-label">PAN Number</div>
-            <p className="gpa-value">{panData.value}</p>
-          </div>
-
-        ) : (
-          /* 3️⃣ Marksheet / Academic Mode */
-          <>
-            {/* SGPA */}
-            {sgpaData && (
-              <div className="gpa-box sgpa-theme">
-                <div className="gpa-label">Current SGPA</div>
-                <p className="gpa-value">{sgpaData.value}</p>
-              </div>
-            )}
-
-            {/* CGPA */}
-            {cgpaData && (
-              <div className="gpa-box">
-                <div className="gpa-label">Cumulative CGPA</div>
-                <p className="gpa-value">{cgpaData.value}</p>
-              </div>
-            )}
-
-            {/* University */}
-            {universityData && (
-              <div className="gpa-box">
-                <div className="gpa-label">University Name</div>
-                <p className="gpa-value">{universityData.value}</p>
-              </div>
-            )}
-
-            {/* Course */}
-            {courseData && (
-              <div className="gpa-box">
-                <div className="gpa-label">Course Name</div>
-                <p className="gpa-value">{courseData.value}</p>
-              </div>
-            )}
-
-            {/* Admission Year */}
-            {admissionYearData && (
-              <div className="gpa-box">
-                <div className="gpa-label">Admission Year</div>
-                <p className="gpa-value">{admissionYearData.value}</p>
-              </div>
-            )}
-
-            {/* Passing Year */}
-            {passingYearData && (
-              <div className="gpa-box">
-                <div className="gpa-label">Passing Year</div>
-                <p className="gpa-value">{passingYearData.value}</p>
-              </div>
-            )}
-
-            {/* Info messages */}
-            {!cgpaData && !sgpaData && data && (
-              <p className="info">
-                ℹ️ No GPA values detected automatically. Please check the raw text below.
-              </p>
-            )}
-
-            {!universityData && data && (
-              <p className="info">
-                ℹ️ No University Name detected automatically. Please check the raw text below.
-              </p>
-            )}
-
-            {!courseData && data && (
-              <p className="info">
-                ℹ️ No Course Name detected automatically. Please check the raw text below.
-              </p>
-            )}
-
-            {!admissionYearData && data && (
-              <p className="info">
-                ℹ️ No Admission Year detected automatically. Please check the raw text below.
-              </p>
-            )}
-
-            {!passingYearData && data && (
-              <p className="info">
-                ℹ️ No Passing Year detected automatically. Please check the raw text below.
-              </p>
-            )}
-          </>
-        )}
-
-      </div>
-
-
-
-      {data && (
-        <>
-          <h3>Raw Extracted Text:</h3>
-          <textarea rows="12" readOnly value={data}></textarea>
-        </>
+      {success && (
+        <div className="alert success">
+          ✅ {success}
+        </div>
       )}
+
+      {/* ❌ INVALID DOCUMENT */}
+      {documentType && !isValid && (
+        <div className="alert error">
+          ⚠️ Uploaded file is <strong>not a valid {documentType}</strong> document.
+        </div>
+      )}
+
+      {/* PLACEHOLDER — NEVER EMPTY */}
+      {!rawText && !error && (
+        <div className="placeholder">
+          <p>📌 Waiting for document upload</p>
+          <span>
+            Supported: Aadhaar · PAN · Marksheet (Image / PDF)
+          </span>
+        </div>
+      )}
+
+      {/* ✅ VALID DOCUMENT */}
+      {isValid && (
+        <div className="gpa-container">
+
+          {/* AADHAAR */}
+          {documentType === "AADHAAR" && (
+            <div className="gpa-box highlight">
+              <div className="gpa-label">Aadhaar Number</div>
+              <p className="gpa-value">{adhaarNum?.value}</p>
+            </div>
+          )}
+
+          {/* PAN */}
+          {documentType === "PAN" && (
+            <div className="gpa-box highlight">
+              <div className="gpa-label">PAN Number</div>
+              <p className="gpa-value">{panData?.value}</p>
+            </div>
+          )}
+
+          {/* MARKSHEET */}
+          {documentType === "MARKSHEET" && (
+            <>
+              {sgpaData && (
+                <div className="gpa-box">
+                  <div className="gpa-label">SGPA</div>
+                  <p className="gpa-value">{sgpaData.value}</p>
+                </div>
+              )}
+
+              {cgpaData && (
+                <div className="gpa-box">
+                  <div className="gpa-label">CGPA</div>
+                  <p className="gpa-value">{cgpaData.value}</p>
+                </div>
+              )}
+
+              {universityData && (
+                <div className="gpa-box wide">
+                  <div className="gpa-label">University/Board of Education</div>
+                  <p className="gpa-value">{universityData.value}</p>
+                </div>
+              )}
+
+              {courseData && (
+                <div className="gpa-box wide">
+                  <div className="gpa-label">Course</div>
+                  <p className="gpa-value">{courseData.value}</p>
+                </div>
+              )}
+
+              {admissionYearData && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Admission Year</div>
+                  <p className="gpa-value">{admissionYearData.value}</p>
+                </div>
+              )}
+
+              {passingYearData && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Passing Year</div>
+                  <p className="gpa-value">{passingYearData.value}</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* RAW OCR TEXT */}
+      {rawText && (
+        <div className="raw-box">
+          <h3>Raw Extracted Text</h3>
+          <textarea rows="12" readOnly value={rawText}></textarea>
+        </div>
+      )}
+
+      {loading && (
+        <div className="loader-overlay">
+          <div className="loader-modal">
+            <div className="document">
+              <div className="scan-line"></div>
+            </div>
+            <p className="loader-text">Scanning document using OCR…</p>
+            <p className="loader-subtext">Please wait, this may take a few seconds</p>
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
+
 }
 
 export default Home;
