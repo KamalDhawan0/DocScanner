@@ -14,6 +14,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+
+
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
@@ -62,24 +64,42 @@ const detectDocumentType = (text) => {
     upper.includes('CGPA') ||
     upper.includes('GRADE SHEET') ||
     upper.includes('SEMESTER') ||
-    upper.includes('UNIVERSITY') 
+    upper.includes('UNIVERSITY')
   ) return 'MARKSHEET';
 
   //10th/12th marksheet
-  if(
+  if (
     upper.includes('SECONDARY SCHOOL EXAMINATION') ||
     upper.includes('HIGHER SECONDARY EXAMINATION') ||
     upper.includes('SENIOR SCHOOL CERTIFICATE') ||
     upper.includes('SCHOOL NAME') ||
     upper.includes('AISSE') ||
     upper.includes('AISSCE') ||
-    upper.includes('BOARD OF') 
+    upper.includes('BOARD OF')
   ) return 'MARKSHEET';
+
+
+  // 10th marksheet
+  if (
+    upper.includes('SECONDARY SCHOOL EXAMINATION') ||
+    upper.includes('CLASS X') ||
+    upper.includes('MATRICULATION') ||
+    upper.includes('AISSE') ||
+    upper.includes('CENTRAL BOARD OF SECONDARY EDUCATION')
+  ) return 'TENTH_MARKSHEET';
+
+  // 12th marksheet
+  if (
+    upper.includes('HIGHER SECONDARY EXAMINATION') ||
+    upper.includes('SENIOR SCHOOL CERTIFICATE') ||
+    upper.includes('CLASS XII') ||
+    upper.includes('AISSCE') ||
+    upper.includes('CENTRAL BOARD OF SECONDARY EDUCATION')
+  ) return 'TWELFTH_MARKSHEET';
+
 
   return 'UNKNOWN';
 };
-
-
 
 const extractGPA = (text, type) => {
   const regex = new RegExp(`${type}\\s*[:=]?\\s*(\\d[\\.,]\\d{1,3}|\\d{2,4})`, 'i');
@@ -201,6 +221,47 @@ const extractAadhaar = (text) => {
   return match ? { value: match[1].trim() } : null;
 };
 
+const extractStudentName = (text) => {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    if (
+      line.length > 5 &&
+      line.length < 40 &&
+      !/\d/.test(line) &&
+      line === line.toUpperCase() &&
+      !line.includes('SCHOOL') &&
+      !line.includes('BOARD')
+    ) {
+      return { value: line };
+    }
+  }
+  return null;
+};
+
+const extractSchoolName = (text) => {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    if (
+      line.toUpperCase().includes('SCHOOL') &&
+      line.length > 10
+    ) {
+      return { value: line };
+    }
+  }
+  return null;
+};
+
+const extractResultStatus = (text) => {
+  const upper = text.toUpperCase();
+
+  if (upper.includes('PASS')) return { value: 'PASS' };
+  if (upper.includes('FAIL')) return { value: 'FAIL' };
+
+  return null;
+};
+
 
 
 app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
@@ -208,46 +269,71 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
+  const claimedType = req.body.documentType; // Value from client
   const filePath = req.file.path;
 
   try {
     const ocr = await ocrSpace(filePath, {
-      apiKey: 'K85502252988957',
+      apiKey: process.env.OCR_SPACE_API_KEY,
       language: 'eng',
       OCREngine: 2
     });
 
     const fullText = ocr?.ParsedResults?.[0]?.ParsedText || '';
-    const documentType = detectDocumentType(fullText);
+    const detectedType = detectDocumentType(fullText); // Value detected by server
+
+    // detect mismatch
+    if (claimedType && claimedType !== detectedType) {
+      return res.json({
+        isValid: false,
+        reason: "DOCUMENT_TYPE_MISMATCH",
+        detectedType
+      });
+    }
 
     let result = {
-      documentType,
+      documentType: detectedType,
       isValid: false,
       data: fullText
     };
 
-    if (documentType === 'MARKSHEET') {
+
+    if (detectedType === 'MARKSHEET') {
       result.sgpaData = extractGPA(fullText, 'SGPA');
       result.cgpaData = extractGPA(fullText, 'CGPA');
       result.universityName = extractUniversity(fullText);
       result.courseName = extractCourse(fullText);
       result.admissionYr = extractAdmissionYear(fullText);
       result.passingYr = extractPassingYear(fullText);
-
       result.isValid = Boolean(
         result.sgpaData || result.cgpaData || result.universityName
       );
     }
 
-    if (documentType === 'PAN') {
+    if (detectedType === 'PAN') {
       result.panData = extractPAN(fullText);
       result.isValid = Boolean(result.panData);
     }
 
-    if (documentType === 'AADHAAR') {
+    if (detectedType === 'AADHAAR') {
       result.adhaarNumber = extractAadhaar(fullText);
       result.isValid = Boolean(result.adhaarNumber);
     }
+
+    if (detectedType === 'TENTH_MARKSHEET' || detectedType === 'TWELFTH_MARKSHEET') {
+      result.studentName = extractStudentName(fullText);
+      result.schoolName = extractSchoolName(fullText);
+      result.passingYr = extractPassingYear(fullText);
+      result.resultStatus = extractResultStatus(fullText);
+
+      result.isValid = Boolean(
+        result.studentName &&
+        result.schoolName &&
+        result.passingYr &&
+        result.resultStatus
+      );
+    }
+
 
     return res.json(result);
 
@@ -258,7 +344,7 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
   }
 });
 
-/* -------------------- SERVER -------------------- */
+
 
 app.listen(5000, () => {
   console.log('🚀 Server running on http://localhost:5000');

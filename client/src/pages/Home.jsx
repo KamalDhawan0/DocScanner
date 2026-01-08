@@ -19,9 +19,15 @@ function Home() {
   const [panData, setPanData] = useState(null);
   const [adhaarNum, setAdhaarNum] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [selectedDocType, setSelectedDocType] = useState("");
+
 
 
   const [rawText, setRawText] = useState("");
+
+  const API = process.env.REACT_APP_API_URL;
+
+  console.log(API)
 
   /* ---------------- RESET STATE ---------------- */
   const resetState = () => {
@@ -46,6 +52,11 @@ function Home() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!selectedDocType) {
+      setError("Please select a document type.");
+      return;
+    }
+
     if (!file) {
       setError("Please select a file.");
       return;
@@ -57,20 +68,31 @@ function Home() {
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("documentType", selectedDocType);
 
     try {
-      const res = await fetch("http://localhost:5000/extracttextfromimage", {
+      const res = await fetch(`${API}/extracttextfromimage`, {
         method: "POST",
         body: formData,
       });
 
       const result = await res.json();
 
+      // ❌ Backend error
       if (!res.ok) {
         setError(result.error || "Something went wrong");
         return;
       }
 
+      // ❌ Document type mismatch
+      if (!result.isValid && result.reason === "DOCUMENT_TYPE_MISMATCH") {
+        setError(
+          `Uploaded document is ${result.detectedType}, not ${selectedDocType}`
+        );
+        return;
+      }
+
+      // ✅ Valid document → continue processing
       setDocumentType(result.documentType);
       setIsValid(result.isValid);
 
@@ -85,12 +107,14 @@ function Home() {
       setRawText(result.data || "");
 
       setSuccess("Document scanned successfully");
+
     } catch (err) {
       setError("Server error. Please try again.");
     } finally {
       setLoading(false);
     }
   };
+
 
   /* ---------------- UI ---------------- */
   return (
@@ -101,6 +125,26 @@ function Home() {
       </p>
 
       <form onSubmit={handleSubmit} encType="multipart/form-data" className="upload-box">
+
+        <select
+          value={selectedDocType}
+          style={{marginRight:"10px"}}
+          onChange={(e) => {
+            resetState();
+            setSelectedDocType(e.target.value);
+          }}
+          required
+        >
+          <option value="">Select Document Type</option>
+          <option value="AADHAAR">Aadhaar</option>
+          <option value="PAN">PAN</option>
+          <option value="MARKSHEET">Marksheet</option>
+          <option value="TENTH_MARKSHEET">10th Marksheet</option>
+          <option value="TWELFTH_MARKSHEET">12th Marksheet</option>
+        </select>
+
+
+
         <input
           type="file"
           accept="image/*,.pdf"
@@ -112,6 +156,10 @@ function Home() {
         />
         <button type="submit">Scan Document</button>
       </form>
+
+
+
+
 
       {/* STATUS MESSAGES */}
       {error && (
