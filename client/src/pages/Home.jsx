@@ -18,6 +18,10 @@ function Home() {
   const [passingYearData, setPassingYearData] = useState(null);
   const [panData, setPanData] = useState(null);
   const [adhaarNum, setAdhaarNum] = useState(null);
+  const [tenthStudentName, setTenthStudentName] = useState(null);
+  const [tenthSchoolName, setTenthSchoolName] = useState(null);
+  const [passingYear, setPassingYear] = useState(null);
+  const [tenthResultStatus, setTenthResultStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState("");
 
@@ -27,7 +31,6 @@ function Home() {
 
   const API = process.env.REACT_APP_API_URL;
 
-  console.log(API)
 
   /* ---------------- RESET STATE ---------------- */
   const resetState = () => {
@@ -44,6 +47,10 @@ function Home() {
     setPassingYearData(null);
     setPanData(null);
     setAdhaarNum(null);
+    setPassingYear(null);
+    setTenthSchoolName(null);
+    setTenthStudentName(null);
+    setTenthResultStatus(null);
 
     setRawText("");
   };
@@ -77,6 +84,7 @@ function Home() {
       });
 
       const result = await res.json();
+      setRawText(result.data || "");
 
       // ❌ Backend error
       if (!res.ok) {
@@ -91,6 +99,7 @@ function Home() {
         );
         return;
       }
+      
 
       // ✅ Valid document → continue processing
       setDocumentType(result.documentType);
@@ -104,7 +113,11 @@ function Home() {
       setPassingYearData(result.passingYr || null);
       setPanData(result.panData || null);
       setAdhaarNum(result.adhaarNumber || null);
-      setRawText(result.data || "");
+      setTenthStudentName(result.tenthStudentName || null);
+      setTenthSchoolName(result.tenthSchoolName || null);
+      setPassingYear(result.passingYear || null);
+      setTenthResultStatus(result.tenthResultStatus || null);
+
 
       setSuccess("Document scanned successfully");
 
@@ -128,7 +141,7 @@ function Home() {
 
         <select
           value={selectedDocType}
-          style={{marginRight:"10px"}}
+          style={{ marginRight: "10px" }}
           onChange={(e) => {
             resetState();
             setSelectedDocType(e.target.value);
@@ -257,8 +270,75 @@ function Home() {
               )}
             </>
           )}
+
+          {/* 10th  */}
+          {documentType === "TENTH_MARKSHEET" && (
+            <>
+              {tenthStudentName && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Student Name</div>
+                  <p className="gpa-value">{tenthStudentName?.value}</p>
+                </div>
+              )}
+
+
+              {tenthSchoolName && (
+                <div className="gpa-box">
+                  <div className="gpa-label">School Name</div>
+                  <p className="gpa-value">{tenthSchoolName?.value}</p>
+                </div>
+              )}
+
+
+              {tenthResultStatus && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Result Status</div>
+                  <p className="gpa-value">{tenthResultStatus.value}</p>
+                </div>
+              )}
+
+
+            </>
+
+          )}
+
+          {/* {documentType === "TWELFTH_MARKSHEETS" && (
+            <>
+              {studentName && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Student Name</div>
+                  <p className="gpa-value">{studentName?.value}</p>
+                </div>
+              )}
+
+
+              {schoolName && (
+                <div className="gpa-box">
+                  <div className="gpa-label">School Name</div>
+                  <p className="gpa-value">{schoolName?.value}</p>
+                </div>
+              )}
+
+              {passingYear && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Passing Year</div>
+                  <p className="gpa-value">{passingYear?.value}</p>
+                </div>
+              )}
+
+              {resultStatus && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Result Status</div>
+                  <p className="gpa-value">{resultStatus?.value}</p>
+                </div>
+              )}
+            </>
+          )} */}
+
         </div>
       )}
+
+
 
       {/* RAW OCR TEXT */}
       {rawText && (

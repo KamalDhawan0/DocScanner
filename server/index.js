@@ -5,6 +5,9 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { ocrSpace } = require('ocr-space-api-wrapper');
 const cors = require('cors');
+const dotenv = require('dotenv').config();
+
+
 
 const app = express();
 
@@ -67,7 +70,33 @@ const detectDocumentType = (text) => {
     upper.includes('UNIVERSITY')
   ) return 'MARKSHEET';
 
-  //10th/12th marksheet
+
+
+  let tenthScore = 0;
+  let twelfthScore = 0;
+
+  // 10th indicators
+  if (text.includes('SECONDARY SCHOOL EXAMINATION')) tenthScore += 3;
+  if (text.includes('CLASS X')) tenthScore += 3;
+  if (text.includes('SSC')) tenthScore += 2;
+  if (text.includes('SSLC')) tenthScore += 2;
+  if (text.includes('MATRICULATION')) tenthScore += 2;
+  if (text.includes('HIGH SCHOOL')) tenthScore += 2;
+
+  // 12th indicators
+  if (text.includes('SENIOR SCHOOL CERTIFICATE')) twelfthScore += 3;
+  if (text.includes('CLASS XII')) twelfthScore += 3;
+  if (text.includes('HSC')) twelfthScore += 2;
+  if (text.includes('INTERMEDIATE')) twelfthScore += 2;
+  if (text.includes('PLUS TWO')) twelfthScore += 2;
+  if (text.includes('PUC')) twelfthScore += 2;
+  if (text.includes('HIGHER SECONDARY')) twelfthScore += 2;
+
+  if (tenthScore > twelfthScore) return 'TENTH_MARKSHEET';
+  if (twelfthScore > tenthScore) return 'TWELFTH_MARKSHEET';
+
+
+  // marksheet
   if (
     upper.includes('SECONDARY SCHOOL EXAMINATION') ||
     upper.includes('HIGHER SECONDARY EXAMINATION') ||
@@ -79,23 +108,6 @@ const detectDocumentType = (text) => {
   ) return 'MARKSHEET';
 
 
-  // 10th marksheet
-  if (
-    upper.includes('SECONDARY SCHOOL EXAMINATION') ||
-    upper.includes('CLASS X') ||
-    upper.includes('MATRICULATION') ||
-    upper.includes('AISSE') ||
-    upper.includes('CENTRAL BOARD OF SECONDARY EDUCATION')
-  ) return 'TENTH_MARKSHEET';
-
-  // 12th marksheet
-  if (
-    upper.includes('HIGHER SECONDARY EXAMINATION') ||
-    upper.includes('SENIOR SCHOOL CERTIFICATE') ||
-    upper.includes('CLASS XII') ||
-    upper.includes('AISSCE') ||
-    upper.includes('CENTRAL BOARD OF SECONDARY EDUCATION')
-  ) return 'TWELFTH_MARKSHEET';
 
 
   return 'UNKNOWN';
@@ -221,39 +233,141 @@ const extractAadhaar = (text) => {
   return match ? { value: match[1].trim() } : null;
 };
 
-const extractStudentName = (text) => {
+const extractTenthStudentName = (text) => {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-  for (const line of lines) {
+  const hasParentSection = /MOTHER|FATHER|GUARDIAN/i.test(text);
+
+  let best = null;
+  let bestScore = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const original = lines[i];
+    const line = original.toUpperCase();
+    let score = 0;
+
+    // ❌ Hard rejections
     if (
-      line.length > 5 &&
-      line.length < 40 &&
-      !/\d/.test(line) &&
-      line === line.toUpperCase() &&
-      !line.includes('SCHOOL') &&
-      !line.includes('BOARD')
+      /\d/.test(line) ||
+      line.length < 6 || line.length > 40 ||
+      /SCHOOL|BOARD|EXAMINATION|CERTIFICATE|MARKS|SUBJECT|RESULT|GRADE/i.test(line) ||
+      /MOTHER|FATHER|GUARDIAN/i.test(line)     // 🚫 reject parent lines
     ) {
-      return { value: line };
+      continue;
+    }
+
+    const words = line.split(' ').filter(w => w.length > 1);
+
+    // 🚫 Reject single-word names if parent section exists
+    if (hasParentSection && words.length < 2) continue;
+
+    // 1️⃣ Strongest signal: "certify that"
+    if (
+      /CERTIFY/i.test(lines[i - 1] || '') ||
+      /CERTIFY/i.test(lines[i - 2] || '')
+    ) score += 8;
+
+    // 2️⃣ Name label (but not parent name)
+    if (
+      /NAME/i.test(lines[i - 1] || '') &&
+      !/MOTHER|FATHER|GUARDIAN/i.test(lines[i - 1])
+    ) score += 4;
+
+    // 3️⃣ Position before parents
+    if (
+      /MOTHER|FATHER|GUARDIAN/i.test(lines[i + 1] || '') ||
+      /MOTHER|FATHER|GUARDIAN/i.test(lines[i + 2] || '')
+    ) score += 5;
+
+    // 4️⃣ Uppercase formatting
+    if (original === original.toUpperCase()) score += 2;
+
+    // 5️⃣ Name-like structure (2–4 words)
+    if (words.length >= 2 && words.length <= 4) score += 3;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = original;
     }
   }
-  return null;
+
+  if (!best || bestScore < 8) return null;
+
+  return {
+    value: best
+      .replace(/^[^A-Z]+/i, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  };
 };
 
-const extractSchoolName = (text) => {
+
+const extractTenthSchoolName = (text) => {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-  for (const line of lines) {
+  let bestLine = null;
+  let bestScore = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const original = lines[i];
+    const line = original.toUpperCase();
+
+    let score = 0;
+
+    // 1️⃣ Must look like a school name
+    if (/SCHOOL|VIDYALAYA|INSTITUTION|ACADEMY|COLLEGE/i.test(line)) {
+      score += 5;
+    } else {
+      continue;
+    }
+
+    // 2️⃣ Reject document headers
+    if (/EXAMINATION|CERTIFICATE|MARKS|RESULT|STATEMENT|BOARD/i.test(line)) {
+      continue;
+    }
+
+    // 3️⃣ Length sanity check
+    if (line.length > 15) score += 2;
+
+    // 4️⃣ School code context (very strong signal in India)
     if (
-      line.toUpperCase().includes('SCHOOL') &&
-      line.length > 10
+      /\d{4,6}/.test(line) ||
+      /\d{4,6}/.test(lines[i - 1] || '') ||
+      /\d{4,6}/.test(lines[i + 1] || '')
     ) {
-      return { value: line };
+      score += 4;
+    }
+
+    // 5️⃣ Uppercase formatting (common in marksheets)
+    if (original === original.toUpperCase()) score += 1;
+
+    // 6️⃣ Prefer longer, descriptive names
+    if (line.length > 30) score += 2;
+
+    // Keep the best scoring line
+    if (score > bestScore) {
+      bestScore = score;
+      bestLine = original;
     }
   }
-  return null;
+
+  // Minimum confidence threshold
+  if (!bestLine || bestScore < 6) return null;
+
+  // 🧹 Cleanup OCR noise & addresses
+  return {
+    value: bestLine
+      .replace("frater", "")
+      .replace(/^\s*SCHOOL\s+/i, '')
+      .replace(/\b\d{4,6}-?/g, '')                       // remove school code
+      .replace(/\b(DISTRICT|DELHI|HARYANA|INDIA)\b/gi, '')// remove locations
+      .replace(/^[^A-Z]+/i, '')                           // leading OCR junk
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  };
 };
 
-const extractResultStatus = (text) => {
+const extractTenthResultStatus = (text) => {
   const upper = text.toUpperCase();
 
   if (upper.includes('PASS')) return { value: 'PASS' };
@@ -287,7 +401,8 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       return res.json({
         isValid: false,
         reason: "DOCUMENT_TYPE_MISMATCH",
-        detectedType
+        detectedType,
+        data: fullText
       });
     }
 
@@ -320,17 +435,29 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       result.isValid = Boolean(result.adhaarNumber);
     }
 
-    if (detectedType === 'TENTH_MARKSHEET' || detectedType === 'TWELFTH_MARKSHEET') {
-      result.studentName = extractStudentName(fullText);
-      result.schoolName = extractSchoolName(fullText);
-      result.passingYr = extractPassingYear(fullText);
-      result.resultStatus = extractResultStatus(fullText);
+    // if (detectedType === 'TENTH_MARKSHEET') {
+    //   result.studentName = extractStudentName(fullText);
+    //   result.schoolName = extractSchoolName(fullText);
+    //   result.passingYr = extractPassingYear(fullText);
+    //   result.resultStatus = extractResultStatus(fullText);
+
+    //   result.isValid = Boolean(
+    //     result.studentName &&
+    //     result.schoolName &&
+    //     result.passingYr &&
+    //     result.resultStatus
+    //   );
+    // }
+
+    if (detectedType === 'TENTH_MARKSHEET') {
+      result.tenthStudentName = extractTenthStudentName(fullText);
+      result.tenthSchoolName = extractTenthSchoolName(fullText);
+      result.tenthResultStatus = extractTenthResultStatus(fullText);
 
       result.isValid = Boolean(
-        result.studentName &&
-        result.schoolName &&
-        result.passingYr &&
-        result.resultStatus
+        result.tenthStudentName &&
+        result.tenthSchoolName &&
+        result.tenthResultStatus
       );
     }
 
