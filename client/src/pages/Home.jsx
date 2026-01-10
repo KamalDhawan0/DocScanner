@@ -20,10 +20,11 @@ function Home() {
   const [adhaarNum, setAdhaarNum] = useState(null);
   const [tenthStudentName, setTenthStudentName] = useState(null);
   const [tenthSchoolName, setTenthSchoolName] = useState(null);
-  const [passingYear, setPassingYear] = useState(null);
   const [tenthResultStatus, setTenthResultStatus] = useState(null);
+  const [tengthPassingYear, setTengthPassingYear] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState("");
+
 
 
 
@@ -47,7 +48,7 @@ function Home() {
     setPassingYearData(null);
     setPanData(null);
     setAdhaarNum(null);
-    setPassingYear(null);
+    setTengthPassingYear(null);
     setTenthSchoolName(null);
     setTenthStudentName(null);
     setTenthResultStatus(null);
@@ -86,6 +87,12 @@ function Home() {
       const result = await res.json();
       setRawText(result.data || "");
 
+      console.log(result.documentType);
+      console.log(result);
+
+     
+
+
       // ❌ Backend error
       if (!res.ok) {
         setError(result.error || "Something went wrong");
@@ -99,6 +106,7 @@ function Home() {
         );
         return;
       }
+
       
 
       // ✅ Valid document → continue processing
@@ -115,7 +123,7 @@ function Home() {
       setAdhaarNum(result.adhaarNumber || null);
       setTenthStudentName(result.tenthStudentName || null);
       setTenthSchoolName(result.tenthSchoolName || null);
-      setPassingYear(result.passingYear || null);
+      setTengthPassingYear(result.tengthPassingYear || null);
       setTenthResultStatus(result.tenthResultStatus || null);
 
 
@@ -296,6 +304,14 @@ function Home() {
                   <p className="gpa-value">{tenthResultStatus.value}</p>
                 </div>
               )}
+
+              {tengthPassingYear && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Passing Year</div>
+                  <p className="gpa-value">{tengthPassingYear.value}</p>
+                </div>
+              )}
+
 
 
             </>

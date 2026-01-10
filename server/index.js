@@ -234,73 +234,132 @@ const extractAadhaar = (text) => {
 };
 
 const extractTenthStudentName = (text) => {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const cleanText = text
+    .replace(/\r/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  const hasParentSection = /MOTHER|FATHER|GUARDIAN/i.test(text);
+  /* ===============================
+     1️⃣ CERTIFY-THAT (HIGHEST PRIORITY)
+     =============================== */
+  const certifyPatterns = [
+    /THIS IS TO CERTIFY THAT\s+([A-Z][A-Z\s]{3,40})/i,
+    /CERTIFIED THAT\s+([A-Z][A-Z\s]{3,40})/i,
 
-  let best = null;
-  let bestScore = 0;
+    /NAME OF STUDENT\s*[:\-]?\s*([A-Z][A-Z\s]{3,40})/i,
+    /NAME OF THE STUDENT\s*[:\-]?\s*([A-Z][A-Z\s]{3,40})/i,
+    /STUDENT NAME\s*[:\-]?\s*([A-Z][A-Z\s]{3,40})/i
+  ];
 
-  for (let i = 0; i < lines.length; i++) {
-    const original = lines[i];
-    const line = original.toUpperCase();
-    let score = 0;
-
-    // ❌ Hard rejections
-    if (
-      /\d/.test(line) ||
-      line.length < 6 || line.length > 40 ||
-      /SCHOOL|BOARD|EXAMINATION|CERTIFICATE|MARKS|SUBJECT|RESULT|GRADE/i.test(line) ||
-      /MOTHER|FATHER|GUARDIAN/i.test(line)     // 🚫 reject parent lines
-    ) {
-      continue;
-    }
-
-    const words = line.split(' ').filter(w => w.length > 1);
-
-    // 🚫 Reject single-word names if parent section exists
-    if (hasParentSection && words.length < 2) continue;
-
-    // 1️⃣ Strongest signal: "certify that"
-    if (
-      /CERTIFY/i.test(lines[i - 1] || '') ||
-      /CERTIFY/i.test(lines[i - 2] || '')
-    ) score += 8;
-
-    // 2️⃣ Name label (but not parent name)
-    if (
-      /NAME/i.test(lines[i - 1] || '') &&
-      !/MOTHER|FATHER|GUARDIAN/i.test(lines[i - 1])
-    ) score += 4;
-
-    // 3️⃣ Position before parents
-    if (
-      /MOTHER|FATHER|GUARDIAN/i.test(lines[i + 1] || '') ||
-      /MOTHER|FATHER|GUARDIAN/i.test(lines[i + 2] || '')
-    ) score += 5;
-
-    // 4️⃣ Uppercase formatting
-    if (original === original.toUpperCase()) score += 2;
-
-    // 5️⃣ Name-like structure (2–4 words)
-    if (words.length >= 2 && words.length <= 4) score += 3;
-
-    if (score > bestScore) {
-      bestScore = score;
-      best = original;
+  for (const pattern of certifyPatterns) {
+    const match = cleanText.match(pattern);
+    if (match) {
+      return { value: sanitizeName(match[1]) };
     }
   }
 
-  if (!best || bestScore < 8) return null;
+  /* ===============================
+     2️⃣ NAME LABEL BASED
+     =============================== */
+  const nameLabelPatterns = [
+    /NAME OF (THE )?CANDIDATE\s*[:\-]?\s*([A-Z][A-Z\s]{3,40})/i,
+    /STUDENT NAME\s*[:\-]?\s*([A-Z][A-Z\s]{3,40})/i,
+    /CANDIDATE NAME\s*[:\-]?\s*([A-Z][A-Z\s]{3,40})/i
+  ];
 
-  return {
-    value: best
-      .replace(/^[^A-Z]+/i, '')
-      .replace(/\s{2,}/g, ' ')
-      .trim()
-  };
+  for (const pattern of nameLabelPatterns) {
+    const match = cleanText.match(pattern);
+    if (match) {
+      return { value: sanitizeName(match[2] || match[1]) };
+    }
+  }
+
+  /* ===============================
+     3️⃣ LINE-BEFORE-PARENT (STATE BOARDS)
+     =============================== */
+  const lines = text
+    .split('\n')
+    .map(l => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].toUpperCase();
+
+    if (
+      /MOTHER|FATHER|GUARDIAN/i.test(lines[i + 1] || '') &&
+      /^[A-Z\s]{5,40}$/.test(line) &&
+      !/ROLL|DOB|DATE|SCHOOL|BOARD/i.test(line)
+    ) {
+      return { value: sanitizeName(lines[i]) };
+    }
+  }
+
+  return null;
 };
 
+/* ---------- NAME CLEANER ---------- */
+const sanitizeName = (name) => {
+  return name
+    .replace(/[^A-Z\s]/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+};
+
+const extractTengthPassingYear = (text) => {
+  const cleanText = text
+    .replace(/\r/g, '')
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+
+  /* ===============================
+     1️⃣ EXAMINATION CONTEXT (STRONGEST)
+     =============================== */
+  const examPatterns = [
+    /SECONDARY SCHOOL EXAMINATION[, ]+((19|20)\d{2})/,
+    /HIGHER SECONDARY EXAMINATION[, ]+((19|20)\d{2})/,
+    /MATRICULATION EXAMINATION[, ]+((19|20)\d{2})/,
+    /ANNUAL EXAMINATION[, ]+((19|20)\d{2})/,
+    /EXAMINATION HELD IN\s+\w+\s+((19|20)\d{2})/,
+    /EXAMINATION[, ]+((19|20)\d{2})/
+  ];
+
+  for (const pattern of examPatterns) {
+    const match = cleanText.match(pattern);
+    if (match) {
+      return { value: match[1] };
+    }
+  }
+
+  /* ===============================
+     2️⃣ RESULT / PASS CONTEXT
+     =============================== */
+  const resultPatterns = [
+    /PASSED.*?((19|20)\d{2})/,
+    /RESULT.*?((19|20)\d{2})/,
+    /QUALIFIED.*?((19|20)\d{2})/,
+    /SUCCESSFULLY COMPLETED.*?((19|20)\d{2})/
+  ];
+
+  for (const pattern of resultPatterns) {
+    const match = cleanText.match(pattern);
+    if (match) {
+      return { value: match[1] };
+    }
+  }
+
+  /* ===============================
+     3️⃣ DATE OF ISSUE (LAST RESORT)
+     =============================== */
+  const dateMatch = cleanText.match(
+    /\bDATED[: ]*\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]((19|20)\d{2}))\b/
+  );
+
+  if (dateMatch) {
+    return { value: dateMatch[2] };
+  }
+
+  return null;
+};
 
 const extractTenthSchoolName = (text) => {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -390,10 +449,13 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
     const ocr = await ocrSpace(filePath, {
       apiKey: process.env.OCR_SPACE_API_KEY,
       language: 'eng',
-      OCREngine: 2
+      OCREngine: 2,
     });
 
-    const fullText = ocr?.ParsedResults?.[0]?.ParsedText || '';
+    const fullText =
+      ocr?.ParsedResults?.[0]?.ParsedText || '';
+
+
     const detectedType = detectDocumentType(fullText); // Value detected by server
 
     // detect mismatch
@@ -414,25 +476,37 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
 
 
     if (detectedType === 'MARKSHEET') {
-      result.sgpaData = extractGPA(fullText, 'SGPA');
-      result.cgpaData = extractGPA(fullText, 'CGPA');
-      result.universityName = extractUniversity(fullText);
-      result.courseName = extractCourse(fullText);
-      result.admissionYr = extractAdmissionYear(fullText);
-      result.passingYr = extractPassingYear(fullText);
-      result.isValid = Boolean(
-        result.sgpaData || result.cgpaData || result.universityName
-      );
+
+      const sgpa = extractGPA(fullText, 'SGPA');
+      const cgpa = extractGPA(fullText, 'CGPA');
+      const uniName = extractUniversity(fullText);
+      const courseName = extractCourse(fullText);
+      const admissionYr = extractAdmissionYear(fullText);
+      const passingYr = extractPassingYear(fullText);
+
+      result.sgpaData = sgpa || "";
+      result.cgpaData = cgpa || "";
+      result.universityName = uniName || "";
+      result.courseName = courseName || "";
+      result.admissionYr = admissionYr || "";
+      result.passingYr = passingYr || "";
+
+      result.isValid = true;
+
     }
 
     if (detectedType === 'PAN') {
-      result.panData = extractPAN(fullText);
-      result.isValid = Boolean(result.panData);
+      const panNum = extractPAN(fullText);
+      result.panData = panNum || "";
+
+      result.isValid = true;
     }
 
     if (detectedType === 'AADHAAR') {
-      result.adhaarNumber = extractAadhaar(fullText);
-      result.isValid = Boolean(result.adhaarNumber);
+      const adharNum = extractAadhaar(fullText);
+      result.adhaarNumber = adharNum || "";
+
+      result.isValid = true;
     }
 
     // if (detectedType === 'TENTH_MARKSHEET') {
@@ -450,21 +524,26 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
     // }
 
     if (detectedType === 'TENTH_MARKSHEET') {
-      result.tenthStudentName = extractTenthStudentName(fullText);
-      result.tenthSchoolName = extractTenthSchoolName(fullText);
-      result.tenthResultStatus = extractTenthResultStatus(fullText);
+      const studentName = extractTenthStudentName(fullText);
+      const schoolName = extractTenthSchoolName(fullText);
+      const resultStatus = extractTenthResultStatus(fullText);
+      const passingYr = extractTengthPassingYear(fullText);
 
-      result.isValid = Boolean(
-        result.tenthStudentName &&
-        result.tenthSchoolName &&
-        result.tenthResultStatus
-      );
+      result.tenthStudentName = studentName || "";
+      result.tenthSchoolName = schoolName || "";
+      result.tenthResultStatus = resultStatus || "";
+      result.tengthPassingYear = passingYr || "";
+
+      result.isValid = true;
     }
 
 
     return res.json(result);
 
-  } catch (err) {
+  } 
+  
+  
+  catch (err) {
     return res.status(500).json({ error: err.message });
   } finally {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
