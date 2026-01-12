@@ -12,15 +12,23 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "axios": "^1.13.2",
+    "canvas": "^3.2.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "ejs": "^3.1.10",
     "express": "^5.1.0",
+    "form-data": "^4.0.5",
     "multer": "^2.0.2",
     "node-tesseract-ocr": "^2.2.1",
     "nodemon": "^3.1.10",
     "ocr-space-api-wrapper": "^2.4.2",
+    "pdf-lib": "^1.17.1",
+    "pdf-poppler": "^0.2.3",
+    "pdf-to-img": "^5.0.0",
     "pdf2pic": "^3.2.0",
+    "pdfjs": "^2.5.4",
+    "pdfjs-dist": "^5.4.530",
     "sharp": "^0.34.5",
     "uuid": "^11.1.0"
   }

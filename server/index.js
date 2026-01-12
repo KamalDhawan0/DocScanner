@@ -3,9 +3,10 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { ocrSpace } = require('ocr-space-api-wrapper');
 const cors = require('cors');
 const dotenv = require('dotenv').config();
+const axios = require('axios');
+const FormData = require('form-data');
 
 
 
@@ -361,6 +362,8 @@ const extractTengthPassingYear = (text) => {
   return null;
 };
 
+
+
 const extractTenthSchoolName = (text) => {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
@@ -437,23 +440,76 @@ const extractTenthResultStatus = (text) => {
 
 
 
+async function performOCR(filePath, isPDF = false) {
+  const formData = new FormData();
+
+  formData.append('file', fs.createReadStream(filePath), {
+    filename: path.basename(filePath),
+  });
+
+  formData.append('apikey', process.env.OCR_SPACE_API_KEY);
+  formData.append('language', 'eng');
+  formData.append('OCREngine', '2');
+  formData.append('scale', 'true');
+
+  // 🔥 REQUIRED FOR PDFS
+  if (isPDF) {
+    formData.append('filetype', 'PDF');
+    formData.append('isOverlayRequired', 'false');
+  }
+
+  try {
+    const response = await axios.post(
+      'https://api.ocr.space/parse/image',
+      formData,
+      {
+        headers: formData.getHeaders(),
+        timeout: 90000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
+      }
+    );
+
+    if (response.data.IsErroredOnProcessing) {
+      console.error("OCR Space API Error:", response.data.ErrorMessage);
+      return "";
+    }
+
+    // 🔥 PDFs can return multiple pages
+    const parsedResults = response.data.ParsedResults || [];
+
+    const extractedText = parsedResults
+      .map(p => p.ParsedText)
+      .join('\n');
+
+    if (!extractedText) {
+      console.warn("OCR processed successfully but returned no text.");
+    }
+
+    return extractedText;
+
+  } catch (error) {
+    console.error("OCR Connection Failed:", error.response?.data || error.message);
+    return "";
+  }
+}
+
+
 app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  const claimedType = req.body.documentType; // Value from client
   const filePath = req.file.path;
+  const isPDF = req.file.mimetype === 'application/pdf';
+  const claimedType = req.body.documentType;
 
   try {
-    const ocr = await ocrSpace(filePath, {
-      apiKey: process.env.OCR_SPACE_API_KEY,
-      language: 'eng',
-      OCREngine: 2,
-    });
-
-    const fullText =
-      ocr?.ParsedResults?.[0]?.ParsedText || '';
+  
+    const fullText = await performOCR(filePath, isPDF);
+    
+  
+    console.log(`Extracted text length: ${fullText.length}`);
 
 
     const detectedType = detectDocumentType(fullText); // Value detected by server
@@ -538,15 +594,11 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
     }
 
 
+
     return res.json(result);
 
-  } 
-  
-  
-  catch (err) {
+  } catch (err) {
     return res.status(500).json({ error: err.message });
-  } finally {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
 });
 
