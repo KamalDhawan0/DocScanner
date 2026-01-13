@@ -47,6 +47,61 @@ const upload = multer({
 });
 
 
+async function performOCR(filePath, isPDF = false) {
+  const formData = new FormData();
+
+  formData.append('file', fs.createReadStream(filePath), {
+    filename: path.basename(filePath),
+  });
+
+  formData.append('apikey', process.env.OCR_SPACE_API_KEY);
+  formData.append('language', 'eng');
+  formData.append('OCREngine', '2');
+  formData.append('scale', 'true');
+
+  // 🔥 REQUIRED FOR PDFS
+  if (isPDF) {
+    formData.append('filetype', 'PDF');
+    formData.append('isOverlayRequired', 'false');
+  }
+
+  try {
+    const response = await axios.post(
+      'https://api.ocr.space/parse/image',
+      formData,
+      {
+        headers: formData.getHeaders(),
+        timeout: 90000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
+      }
+    );
+
+    if (response.data.IsErroredOnProcessing) {
+      console.error("OCR Space API Error:", response.data.ErrorMessage);
+      return "";
+    }
+
+    // 🔥 PDFs can return multiple pages
+    const parsedResults = response.data.ParsedResults || [];
+
+    const extractedText = parsedResults
+      .map(p => p.ParsedText)
+      .join('\n');
+
+    if (!extractedText) {
+      console.warn("OCR processed successfully but returned no text.");
+    }
+
+    return extractedText;
+
+  } catch (error) {
+    console.error("OCR Connection Failed:", error.response?.data || error.message);
+    return "";
+  }
+}
+
+
 
 
 
@@ -80,22 +135,29 @@ const detectDocumentType = (text) => {
   let tenthScore = 0;
   let twelfthScore = 0;
 
-  // 10th indicators
-  if (text.includes('SECONDARY SCHOOL EXAMINATION')) tenthScore += 3;
-  if (text.includes('CLASS X')) tenthScore += 3;
-  if (text.includes('SSC')) tenthScore += 2;
-  if (text.includes('SSLC')) tenthScore += 2;
-  if (text.includes('MATRICULATION')) tenthScore += 2;
-  if (text.includes('HIGH SCHOOL')) tenthScore += 2;
+// ---------------- 10th indicators ----------------
+if (text.includes('SECONDARY SCHOOL EXAMINATION')) tenthScore += 3;
+if (text.includes('CLASS X')) tenthScore += 3;
+if (text.includes('SSC')) tenthScore += 2;
+if (text.includes('SSLC')) tenthScore += 2;
+if (text.includes('MATRICULATION')) tenthScore += 2;
+if (text.includes('HIGH SCHOOL')) tenthScore += 2;
+if (text.includes('10TH')) tenthScore += 2;
+if (text.includes('MATRIC')) tenthScore += 2;
+if (text.includes('BOARD EXAM')) tenthScore += 1;
+if (text.includes('SECONDARY EXAM')) tenthScore += 1;
 
-  // 12th indicators
-  if (text.includes('SENIOR SCHOOL CERTIFICATE')) twelfthScore += 3;
-  if (text.includes('CLASS XII')) twelfthScore += 3;
-  if (text.includes('HSC')) twelfthScore += 2;
-  if (text.includes('INTERMEDIATE')) twelfthScore += 2;
-  if (text.includes('PLUS TWO')) twelfthScore += 2;
-  if (text.includes('PUC')) twelfthScore += 2;
-  if (text.includes('HIGHER SECONDARY')) twelfthScore += 2;
+// ---------------- 12th indicators ----------------
+if (text.includes('SENIOR SCHOOL CERTIFICATE')) twelfthScore += 3;
+if (text.includes('CLASS XII')) twelfthScore += 3;
+if (text.includes('HSC')) twelfthScore += 2;
+if (text.includes('INTERMEDIATE')) twelfthScore += 2;
+if (text.includes('PLUS TWO')) twelfthScore += 2;
+if (text.includes('PUC')) twelfthScore += 2;
+if (text.includes('HIGHER SECONDARY')) twelfthScore += 2;
+if (text.includes('12TH')) twelfthScore += 2;
+if (text.includes('SENIOR SECONDARY')) twelfthScore += 2;
+if (text.includes('PRE-UNIVERSITY')) twelfthScore += 1;
 
   if (tenthScore > twelfthScore) return 'TENTH_MARKSHEET';
   if (twelfthScore > tenthScore) return 'TWELFTH_MARKSHEET';
@@ -117,6 +179,9 @@ const detectDocumentType = (text) => {
 
   return 'UNKNOWN';
 };
+
+
+//Marksheet Logic
 
 const extractGPA = (text, type) => {
   const regex = new RegExp(`${type}\\s*[:=]?\\s*(\\d[\\.,]\\d{1,3}|\\d{2,4})`, 'i');
@@ -217,6 +282,8 @@ const extractPassingYear = (text) => {
   return best ? { value: best } : null;
 };
 
+//Pan Logic
+
 const extractPAN = (text) => {
   const upper = text.toUpperCase();
 
@@ -231,12 +298,17 @@ const extractPAN = (text) => {
   return match ? { value: match[0] } : null;
 };
 
+//Adhaar Logic
+
 const extractAadhaar = (text) => {
   const match = text.toUpperCase()
     .match(/(?:MALE|FEMALE)\s*[\r\n]+([0-9 ]{10,20})/);
 
   return match ? { value: match[1].trim() } : null;
 };
+
+
+//10th Logic
 
 const extractTenthStudentName = (text) => {
   const cleanText = text
@@ -302,7 +374,6 @@ const extractTenthStudentName = (text) => {
   return null;
 };
 
-/* ---------- NAME CLEANER ---------- */
 const sanitizeName = (name) => {
   return name
     .replace(/[^A-Z\s]/gi, '')
@@ -365,7 +436,6 @@ const extractTengthPassingYear = (text) => {
 
   return null;
 };
-
 
 
 const extractTenthSchoolName = (text) => {
@@ -443,60 +513,193 @@ const extractTenthResultStatus = (text) => {
 };
 
 
+// 12th Logic
 
-async function performOCR(filePath, isPDF = false) {
-  const formData = new FormData();
+const extractTwelfthStudentName = (text) => {
+  const anchors = [
+    'THIS IS TO CERTIFY THAT',
+    'STUDENT NAME',
+    'CANDIDATE NAME',
+    'NAME OF THE STUDENT'
+  ];
 
-  formData.append('file', fs.createReadStream(filePath), {
-    filename: path.basename(filePath),
-  });
+  const lines = text
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
 
-  formData.append('apikey', process.env.OCR_SPACE_API_KEY);
-  formData.append('language', 'eng');
-  formData.append('OCREngine', '2');
-  formData.append('scale', 'true');
+  for (let i = 0; i < lines.length; i++) {
+    const upperLine = lines[i].toUpperCase();
 
-  // 🔥 REQUIRED FOR PDFS
-  if (isPDF) {
-    formData.append('filetype', 'PDF');
-    formData.append('isOverlayRequired', 'false');
-  }
+    if (anchors.some(a => upperLine.includes(a))) {
+      // 🔑 ONLY search forward
+      for (let j = i + 1; j < lines.length; j++) {
+        const candidate = lines[j]
+          .replace(/[^\x00-\x7F]/g, '')   // remove Hindi / Cyrillic
+          .replace(/[^A-Z\s]/gi, '')      // keep only A–Z & spaces
+          .replace(/\s{2,}/g, ' ')
+          .trim();
 
-  try {
-    const response = await axios.post(
-      'https://api.ocr.space/parse/image',
-      formData,
-      {
-        headers: formData.getHeaders(),
-        timeout: 90000,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity
+        if (
+          candidate.length >= 5 &&
+          candidate.length <= 40 &&
+          candidate.split(' ').length >= 2 &&
+          /^[A-Z\s]+$/.test(candidate) &&
+          !/ROLL|NO|NUMBER|SCHOOL|BOARD|MOTHER|FATHER|GUARDIAN|RESULT/i.test(candidate)
+        ) {
+          return { value: candidate };
+        }
       }
-    );
-
-    if (response.data.IsErroredOnProcessing) {
-      console.error("OCR Space API Error:", response.data.ErrorMessage);
-      return "";
     }
-
-    // 🔥 PDFs can return multiple pages
-    const parsedResults = response.data.ParsedResults || [];
-
-    const extractedText = parsedResults
-      .map(p => p.ParsedText)
-      .join('\n');
-
-    if (!extractedText) {
-      console.warn("OCR processed successfully but returned no text.");
-    }
-
-    return extractedText;
-
-  } catch (error) {
-    console.error("OCR Connection Failed:", error.response?.data || error.message);
-    return "";
   }
-}
+
+  return null;
+};
+
+
+const extractTwelfthSchoolName = (text) => {
+  const lines = text
+    .split('\n')
+    .map(l => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  const schoolLabels = [
+    /^SCHOOL$/i,
+    /SCHOOL NAME/i,
+    /NAME OF SCHOOL/i,
+    /INSTITUTION/i,
+    /VIDYALAYA/i,
+    /ACADEMY/i
+  ];
+
+  /* ===============================
+     🔥 0️⃣ HIGHEST PRIORITY
+     NUMERIC SCHOOL CODE BASED
+     =============================== */
+  for (const line of lines) {
+    // Matches: 85101 - SCHOOL NAME ...
+    const match = line.match(/^(\d{4,6})\s*[-:]?\s*(.+)$/);
+    if (match) {
+      const candidate = match[2];
+
+      // Exclude certificate headers
+      if (
+        !/SENIOR SCHOOL CERTIFICATE EXAMINATION|SECONDARY SCHOOL EXAMINATION|MARKS STATEMENT|CERTIFICATE/i.test(
+          candidate
+        )
+      ) {
+        const cleaned = candidate
+          .replace(/[^A-Z\s\-\/]/gi, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+
+        if (cleaned.length > 5) {
+          return { value: cleaned };
+        }
+      }
+    }
+  }
+
+  /* ===============================
+     1️⃣ AFTER "FROM"
+     =============================== */
+  for (let i = 0; i < lines.length; i++) {
+    if (/^FROM$/i.test(lines[i])) {
+      const candidate = lines[i + 1] || '';
+      const cleaned = candidate
+        .replace(/\d{4,6}/g, '')
+        .replace(/[^A-Z\s\-\/]/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+      if (cleaned.length > 5) {
+        return { value: cleaned };
+      }
+    }
+  }
+
+  /* ===============================
+     2️⃣ AFTER SCHOOL LABELS
+     =============================== */
+  for (let i = 0; i < lines.length; i++) {
+    if (schoolLabels.some(pattern => pattern.test(lines[i]))) {
+      const candidate = lines[i + 1] || '';
+      const cleaned = candidate
+        .replace(/\d{4,6}/g, '')
+        .replace(/[^A-Z\s\-\/]/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+      if (cleaned.length > 5) {
+        return { value: cleaned };
+      }
+    }
+  }
+
+  /* ===============================
+     3️⃣ FALLBACK KEYWORD LINE
+     =============================== */
+  for (const line of lines) {
+    if (
+      /SCHOOL|VIDYALAYA|INSTITUTION|ACADEMY|COLLEGE/i.test(line) &&
+      !/SENIOR SCHOOL CERTIFICATE EXAMINATION|SECONDARY SCHOOL EXAMINATION/i.test(line)
+    ) {
+      const cleaned = line
+        .replace(/\d{4,6}/g, '')
+        .replace(/[^A-Z\s\-\/]/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+      if (cleaned.length > 5) {
+        return { value: cleaned };
+      }
+    }
+  }
+
+  return null;
+};
+
+
+
+const extractTwelfthPassingYear = (text) => {
+  const upper = text.toUpperCase();
+
+  /* ===============================
+     1️⃣ EXAM TITLE (STRONGEST)
+     =============================== */
+  const examPatterns = [
+    /SENIOR SCHOOL CERTIFICATE EXAMINATION[, ]+((19|20)\d{2})/,
+    /HIGHER SECONDARY EXAMINATION[, ]+((19|20)\d{2})/,
+    /INTERMEDIATE EXAMINATION[, ]+((19|20)\d{2})/,
+    /PLUS TWO EXAMINATION[, ]+((19|20)\d{2})/
+  ];
+
+  for (const pattern of examPatterns) {
+    const match = upper.match(pattern);
+    if (match) return { value: match[1] };
+  }
+
+  /* ===============================
+     2️⃣ RESULT CONTEXT
+     =============================== */
+  const resultMatch = upper.match(/PASSED.*?((19|20)\d{2})/);
+  if (resultMatch) return { value: resultMatch[1] };
+
+  /* ===============================
+     3️⃣ DATE OF ISSUE (LAST)
+     =============================== */
+  const dateMatch = upper.match(/\b(\d{2})[-\/\.](\d{2})[-\/\.]((19|20)\d{2})\b/);
+  if (dateMatch) return { value: dateMatch[3] };
+
+  return null;
+};
+
+const extractTwelfthResultStatus = (text) => {
+  const upper = text.toUpperCase();
+  if (upper.includes('PASS')) return { value: 'PASS' };
+  if (upper.includes('FAIL')) return { value: 'FAIL' };
+  return null;
+};
 
 
 
@@ -571,20 +774,6 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       result.isValid = true;
     }
 
-    // if (detectedType === 'TENTH_MARKSHEET') {
-    //   result.studentName = extractStudentName(fullText);
-    //   result.schoolName = extractSchoolName(fullText);
-    //   result.passingYr = extractPassingYear(fullText);
-    //   result.resultStatus = extractResultStatus(fullText);
-
-    //   result.isValid = Boolean(
-    //     result.studentName &&
-    //     result.schoolName &&
-    //     result.passingYr &&
-    //     result.resultStatus
-    //   );
-    // }
-
     if (detectedType === 'TENTH_MARKSHEET') {
       const studentName = extractTenthStudentName(fullText);
       const schoolName = extractTenthSchoolName(fullText);
@@ -599,6 +788,19 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       result.isValid = true;
     }
 
+    if (detectedType === 'TWELFTH_MARKSHEET') {
+      const studentName = extractTwelfthStudentName(fullText);
+      const schoolName = extractTwelfthSchoolName(fullText);
+      const resultStatus = extractTwelfthResultStatus(fullText);
+      const passingYr = extractTwelfthPassingYear(fullText);
+
+      result.twelfthStudentName = studentName || "";
+      result.twelfthSchoolName = schoolName || "";
+      result.twelfthResultStatus = resultStatus || "";
+      result.twelfthPassingYear = passingYr || "";
+
+      result.isValid = true;
+    }
 
 
     return res.json(result);

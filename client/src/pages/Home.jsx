@@ -16,12 +16,21 @@ function Home() {
   const [courseData, setCourseData] = useState(null);
   const [admissionYearData, setAdmissionYearData] = useState(null);
   const [passingYearData, setPassingYearData] = useState(null);
+
   const [panData, setPanData] = useState(null);
+
   const [adhaarNum, setAdhaarNum] = useState(null);
+
   const [tenthStudentName, setTenthStudentName] = useState(null);
   const [tenthSchoolName, setTenthSchoolName] = useState(null);
   const [tenthResultStatus, setTenthResultStatus] = useState(null);
   const [tengthPassingYear, setTengthPassingYear] = useState(null);
+
+  const [twelfthStudentName, setTwelfthStudentName] = useState(null);
+  const [twelfthSchoolName, setTwelfthSchoolName] = useState(null);
+  const [twelfthResultStatus, setTwelfthResultStatus] = useState(null);
+  const [twelfthPassingYear, setTwelfthPassingYear] = useState(null);
+
   const [loading, setLoading] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState("");
 
@@ -46,15 +55,26 @@ function Home() {
     setCourseData(null);
     setAdmissionYearData(null);
     setPassingYearData(null);
+
     setPanData(null);
+
     setAdhaarNum(null);
+
     setTengthPassingYear(null);
     setTenthSchoolName(null);
     setTenthStudentName(null);
     setTenthResultStatus(null);
 
+    setTwelfthStudentName(null);
+    setTwelfthSchoolName(null);
+    setTwelfthResultStatus(null);
+    setTwelfthPassingYear(null);
+
     setRawText("");
   };
+
+
+
 
   /* ---------------- SUBMIT ---------------- */
   const handleSubmit = async (e) => {
@@ -90,7 +110,7 @@ function Home() {
       console.log(result.documentType);
       console.log(result);
 
-     
+
 
 
       // ❌ Backend error
@@ -107,7 +127,7 @@ function Home() {
         return;
       }
 
-      
+
 
       // ✅ Valid document → continue processing
       setDocumentType(result.documentType);
@@ -119,12 +139,20 @@ function Home() {
       setCourseData(result.courseName || null);
       setAdmissionYearData(result.admissionYr || null);
       setPassingYearData(result.passingYr || null);
+
       setPanData(result.panData || null);
+
       setAdhaarNum(result.adhaarNumber || null);
+
       setTenthStudentName(result.tenthStudentName || null);
       setTenthSchoolName(result.tenthSchoolName || null);
       setTengthPassingYear(result.tengthPassingYear || null);
       setTenthResultStatus(result.tenthResultStatus || null);
+
+      setTwelfthStudentName(result.twelfthStudentName);
+      setTwelfthSchoolName(result.twelfthSchoolName);
+      setTwelfthResultStatus(result.twelfthResultStatus);
+      setTwelfthPassingYear(result.twelfthPassingYear);
 
 
       setSuccess("Document scanned successfully");
@@ -172,8 +200,20 @@ function Home() {
           required
           onChange={(e) => {
             resetState();
-            setFile(e.target.files[0]);
+            const selectedFile = e.target.files[0];
+
+            if (!selectedFile) return;
+
+            if (selectedFile.size > 1024 * 1024) {
+              setError("File size should not exceed 1024 KB (1 MB)");
+              e.target.value = ""; // reset file input
+              setFile(null);
+              return;
+            }
+
+            setFile(selectedFile);
           }}
+
         />
         <button type="submit">Scan Document</button>
       </form>
@@ -318,38 +358,39 @@ function Home() {
 
           )}
 
-          {/* {documentType === "TWELFTH_MARKSHEETS" && (
+          {/* 12th */}
+          {documentType === "TWELFTH_MARKSHEET" && (
             <>
-              {studentName && (
+              {twelfthStudentName && (
                 <div className="gpa-box">
                   <div className="gpa-label">Student Name</div>
-                  <p className="gpa-value">{studentName?.value}</p>
+                  <p className="gpa-value">{twelfthStudentName?.value}</p>
                 </div>
               )}
 
 
-              {schoolName && (
+              {twelfthSchoolName && (
                 <div className="gpa-box">
                   <div className="gpa-label">School Name</div>
-                  <p className="gpa-value">{schoolName?.value}</p>
+                  <p className="gpa-value">{twelfthSchoolName?.value}</p>
                 </div>
               )}
 
-              {passingYear && (
+              {twelfthPassingYear && (
                 <div className="gpa-box">
                   <div className="gpa-label">Passing Year</div>
-                  <p className="gpa-value">{passingYear?.value}</p>
+                  <p className="gpa-value">{twelfthPassingYear?.value}</p>
                 </div>
               )}
 
-              {resultStatus && (
+              {twelfthResultStatus && (
                 <div className="gpa-box">
                   <div className="gpa-label">Result Status</div>
-                  <p className="gpa-value">{resultStatus?.value}</p>
+                  <p className="gpa-value">{twelfthResultStatus?.value}</p>
                 </div>
               )}
             </>
-          )} */}
+          )}
 
         </div>
       )}
