@@ -46,6 +46,10 @@ const upload = multer({
   }
 });
 
+
+
+
+
 //document type detection
 
 const detectDocumentType = (text) => {
@@ -495,6 +499,8 @@ async function performOCR(filePath, isPDF = false) {
 }
 
 
+
+
 app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
@@ -505,10 +511,10 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
   const claimedType = req.body.documentType;
 
   try {
-  
+
     const fullText = await performOCR(filePath, isPDF);
-    
-  
+
+
     console.log(`Extracted text length: ${fullText.length}`);
 
 
