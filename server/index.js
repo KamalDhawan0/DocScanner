@@ -56,7 +56,7 @@ async function performOCR(filePath, isPDF = false) {
 
   formData.append('apikey', process.env.OCR_SPACE_API_KEY);
   formData.append('language', 'eng');
-  formData.append('OCREngine', '2');
+  formData.append('OCREngine', '3');
   formData.append('scale', 'true');
 
   // 🔥 REQUIRED FOR PDFS
@@ -106,7 +106,6 @@ async function performOCR(filePath, isPDF = false) {
 
 
 //document type detection
-
 const detectDocumentType = (text) => {
   const upper = text.toUpperCase();
 
@@ -121,6 +120,20 @@ const detectDocumentType = (text) => {
     /\b(MALE|FEMALE)\b/.test(upper)
   ) return 'AADHAAR';
 
+  if (
+    /^P<IND/m.test(upper) ||                       // MRZ (strongest)
+    (
+      upper.includes('REPUBLIC OF INDIA') &&
+      (
+        upper.includes('PASSPORT NO') ||
+        upper.includes('DATE OF EXPIRY') ||
+        upper.includes('PLACE OF ISSUE')
+      )
+    )
+  ) {
+    return 'PASSPORT';
+  }
+
   //college marksheet
   if (
     upper.includes('SGPA') ||
@@ -131,48 +144,47 @@ const detectDocumentType = (text) => {
   ) return 'MARKSHEET';
 
 
-
   let tenthScore = 0;
   let twelfthScore = 0;
 
-// ---------------- 10th indicators ----------------
-if (text.includes('SECONDARY SCHOOL EXAMINATION')) tenthScore += 3;
-if (text.includes('CLASS X')) tenthScore += 3;
-if (text.includes('SSC')) tenthScore += 2;
-if (text.includes('SSLC')) tenthScore += 2;
-if (text.includes('MATRICULATION')) tenthScore += 2;
-if (text.includes('HIGH SCHOOL')) tenthScore += 2;
-if (text.includes('10TH')) tenthScore += 2;
-if (text.includes('MATRIC')) tenthScore += 2;
-if (text.includes('BOARD EXAM')) tenthScore += 1;
-if (text.includes('SECONDARY EXAM')) tenthScore += 1;
+  // ---------------- 10th indicators ----------------
+  if (text.includes('SECONDARY SCHOOL EXAMINATION')) tenthScore += 3;
+  if (text.includes('CLASS X')) tenthScore += 3;
+  if (text.includes('SSC')) tenthScore += 2;
+  if (text.includes('SSLC')) tenthScore += 2;
+  if (text.includes('MATRICULATION')) tenthScore += 2;
+  if (text.includes('HIGH SCHOOL')) tenthScore += 2;
+  if (text.includes('10TH')) tenthScore += 2;
+  if (text.includes('MATRIC')) tenthScore += 2;
+  if (text.includes('BOARD EXAM')) tenthScore += 1;
+  if (text.includes('SECONDARY EXAM')) tenthScore += 1;
 
-// ---------------- 12th indicators ----------------
-if (text.includes('SENIOR SCHOOL CERTIFICATE')) twelfthScore += 3;
-if (text.includes('CLASS XII')) twelfthScore += 3;
-if (text.includes('HSC')) twelfthScore += 2;
-if (text.includes('INTERMEDIATE')) twelfthScore += 2;
-if (text.includes('PLUS TWO')) twelfthScore += 2;
-if (text.includes('PUC')) twelfthScore += 2;
-if (text.includes('HIGHER SECONDARY')) twelfthScore += 2;
-if (text.includes('12TH')) twelfthScore += 2;
-if (text.includes('SENIOR SECONDARY')) twelfthScore += 2;
-if (text.includes('PRE-UNIVERSITY')) twelfthScore += 1;
+  // ---------------- 12th indicators ----------------
+  if (text.includes('SENIOR SCHOOL CERTIFICATE')) twelfthScore += 3;
+  if (text.includes('CLASS XII')) twelfthScore += 3;
+  if (text.includes('HSC')) twelfthScore += 2;
+  if (text.includes('INTERMEDIATE')) twelfthScore += 2;
+  if (text.includes('PLUS TWO')) twelfthScore += 2;
+  if (text.includes('PUC')) twelfthScore += 2;
+  if (text.includes('HIGHER SECONDARY')) twelfthScore += 2;
+  if (text.includes('12TH')) twelfthScore += 2;
+  if (text.includes('SENIOR SECONDARY')) twelfthScore += 2;
+  if (text.includes('PRE-UNIVERSITY')) twelfthScore += 1;
 
   if (tenthScore > twelfthScore) return 'TENTH_MARKSHEET';
   if (twelfthScore > tenthScore) return 'TWELFTH_MARKSHEET';
 
 
   // marksheet
-  if (
-    upper.includes('SECONDARY SCHOOL EXAMINATION') ||
-    upper.includes('HIGHER SECONDARY EXAMINATION') ||
-    upper.includes('SENIOR SCHOOL CERTIFICATE') ||
-    upper.includes('SCHOOL NAME') ||
-    upper.includes('AISSE') ||
-    upper.includes('AISSCE') ||
-    upper.includes('BOARD OF')
-  ) return 'MARKSHEET';
+  // if (
+  //   upper.includes('SECONDARY SCHOOL EXAMINATION') ||
+  //   upper.includes('HIGHER SECONDARY EXAMINATION') ||
+  //   upper.includes('SENIOR SCHOOL CERTIFICATE') ||
+  //   upper.includes('SCHOOL NAME') ||
+  //   upper.includes('AISSE') ||
+  //   upper.includes('AISSCE') ||
+  //   upper.includes('BOARD OF')
+  // ) return 'MARKSHEET';
 
 
 
@@ -196,49 +208,38 @@ const extractGPA = (text, type) => {
   return { value };
 };
 
-const extractUniversity = (text) => {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 12);
-  const keywords = ['UNIVERSITY', 'INSTITUTE', 'COLLEGE'];
-
-  let best = null;
-  let score = 0;
+function extractUniversity(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
 
   for (const line of lines) {
-    if (/\d/.test(line)) continue;
-    if (line.length < 10) continue;
-
-    let s = 0;
-    keywords.forEach(k => {
-      if (line.toUpperCase().includes(k)) s += 5;
-    });
-    if (line === line.toUpperCase()) s += 2;
-    s += Math.min(line.length / 10, 5);
-
-    if (s > score) {
-      score = s;
-      best = line;
-    }
-  }
-
-  return best ? { value: best } : null;
-};
-
-const extractCourse = (text) => {
-  const keywords = [
-    'BACHELOR', 'MASTER', 'BTECH', 'MTECH', 'B.TECH', 'M.TECH',
-    'MBA', 'MCA', 'BCA', 'ENGINEERING', 'SCIENCE', 'ARTS',
-    'COMMERCE', 'PHD', 'DOCTORATE', 'DIPLOMA'
-  ];
-
-  for (const line of text.split('\n')) {
-    for (const key of keywords) {
-      if (new RegExp(`\\b${key}\\b`, 'i').test(line) && line.length > 15) {
-        return { value: line.trim() };
-      }
+    if (/university/i.test(line)) {
+      return { value: line.replace(/\s{2,}/g, " ") };
     }
   }
   return null;
-};
+}
+
+function extractCourse(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // 1️⃣ Degree-style courses
+  for (const line of lines) {
+    if (/BACHELOR OF|MASTER OF/i.test(line)) {
+      return { value: line };
+    }
+  }
+
+  // 2️⃣ Exam-style courses (B.SC.-PART-I etc.)
+  for (const line of lines) {
+    const match = line.match(/\b(B\.?\s?(SC|A|COM|ED|TECH)\.?\s?-?\s?(PART|YEAR)?\s?-?\s?[IVX0-9]+)\b/i);
+    if (match) {
+      return { value: match[1].toUpperCase() };
+    }
+  }
+
+  return null;
+}
+
 
 const extractAdmissionYear = (text) => {
   const regex = /\b(19|20)\d{2}\b/;
@@ -283,7 +284,6 @@ const extractPassingYear = (text) => {
 };
 
 //Pan Logic
-
 const extractPAN = (text) => {
   const upper = text.toUpperCase();
 
@@ -298,14 +298,213 @@ const extractPAN = (text) => {
   return match ? { value: match[0] } : null;
 };
 
-//Adhaar Logic
 
-const extractAadhaar = (text) => {
-  const match = text.toUpperCase()
-    .match(/(?:MALE|FEMALE)\s*[\r\n]+([0-9 ]{10,20})/);
+const cleanName = (text) =>
+  text
+    .replace(/[^A-Z\s]/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 
-  return match ? { value: match[1].trim() } : null;
+
+const extractPANName = (text) => {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  for (let i = 0; i < lines.length; i++) {
+    if (/NAME/i.test(lines[i]) && !/FATHER/i.test(lines[i])) {
+      const candidate = lines[i + 1] || '';
+      const cleaned = cleanName(candidate);
+
+      if (cleaned.length > 4) {
+        return { value: cleaned };
+      }
+    }
+  }
+  return null;
 };
+
+const extractPANFatherName = (text) => {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  for (let i = 0; i < lines.length; i++) {
+    if (/FATHER/i.test(lines[i])) {
+      const candidate = lines[i + 1] || '';
+      const cleaned = cleanName(candidate);
+
+      if (cleaned.length > 4) {
+        return { value: cleaned };
+      }
+    }
+  }
+  return null;
+};
+
+const extractPANDOB = (text) => {
+  const match = text.match(/\b\d{2}\/\d{2}\/\d{4}\b/);
+  return match ? { value: match[0] } : null;
+};
+
+
+//Adhaar Logic
+function extractAadhaar(text) {
+  const upper = text.toUpperCase();
+
+  // ❌ Ignore VID (16 digits)
+  const withoutVID = upper.replace(/\bVID[:\s]*\d{4}\s\d{4}\s\d{4}\s\d{4}\b/g, '');
+
+  // ✅ Aadhaar number pattern (strict)
+  const match = withoutVID.match(/\b\d{4}\s\d{4}\s\d{4}\b/);
+
+  if (!match) return null;
+
+  return {
+    value: match[0]
+  };
+}
+
+
+function normalize(text) {
+  return text
+    .replace(/\r/g, "")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
+function extractAadhaarName(text) {
+  const clean = normalize(text);
+  const lines = clean
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  let startIndex = 0;
+
+  // Start after known headers (best-effort)
+  for (let i = 0; i < lines.length; i++) {
+    const upper = lines[i].toUpperCase();
+    if (
+      /GOVERNMENT\s+OF/.test(upper) ||
+      /UNIQUE\s+IDENTIFICATION/.test(upper)
+    ) {
+      startIndex = i + 1;
+      break;
+    }
+  }
+
+  const BLOCKLIST = [
+    'UNIQUE',
+    'IDENTIFICATION',
+    'AUTHORITY',
+    'INDIA',
+    'AADHAAR',
+    'ADDRESS',
+    'ISSUED',
+    'SIGNATURE',
+    'PROOF',
+    'CITIZENSHIP'
+  ];
+
+  for (let i = startIndex; i < lines.length; i++) {
+    const line = lines[i];
+    const upper = line.toUpperCase();
+
+    // ❌ Stop before DOB / Gender (name always before these)
+    if (/DOB|DATE OF BIRTH|MALE|FEMALE/.test(upper)) break;
+
+    // ❌ Reject institutional / authority lines (OCR-safe)
+    if (/^GOVERNMENT\s+OF/.test(upper)) continue;
+    if (/^UNIQUE\s+IDENTIFICATION/.test(upper)) continue;
+
+    // ❌ Reject blocklisted content
+    if (BLOCKLIST.some(w => upper.includes(w))) continue;
+
+    // ❌ Must contain only letters and spaces
+    if (!/^[A-Z ]+$/.test(upper)) continue;
+
+    // ❌ Aadhaar names are 2–4 words only
+    const words = line.split(/\s+/);
+    if (words.length < 2 || words.length > 4) continue;
+
+    return { value: line };
+  }
+
+  return null;
+}
+
+function extractAadhaarAddress(text) {
+  const clean = normalize(text);
+  const lines = clean
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  let collecting = false;
+  const addressLines = [];
+
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+
+    // Start after Address label
+    if (/^ADDRESS[:\-]?$/.test(upper)) {
+      collecting = true;
+      continue;
+    }
+
+    if (!collecting) continue;
+
+    // Stop conditions (very important)
+    if (
+      /\b\d{4}\s?\d{4}\s?\d{4}\b/.test(line) || // Aadhaar number
+      upper.includes('VID') ||
+      upper.includes('UIDAI') ||
+      upper.includes('V.UIDAI.GOV') ||
+      upper.includes('UNIQUE IDENTIFICATION')
+    ) {
+      break;
+    }
+
+    addressLines.push(line);
+  }
+
+  if (addressLines.length === 0) return null;
+
+  return {
+    value: addressLines.join(' ')
+      .replace(/\s+,/g, ',')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  };
+}
+
+function extractAadhaarDOB(text) {
+  // Normalize OCR noise
+  const clean = text.replace(/\r/g, "").replace(/\n+/g, "\n");
+
+  const lines = clean.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // DOB label variants
+  const dobLabelRegex = /\b(DOB|D0B|DO8|Date\s*of\s*Birth)\b/i;
+  const dateRegex = /\b\d{2}[\/\-]\d{2}[\/\-]\d{4}\b/;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (dobLabelRegex.test(lines[i])) {
+      // 1️⃣ Try same line
+      const sameLineMatch = lines[i].match(dateRegex);
+      if (sameLineMatch) {
+        return { value: sameLineMatch[0].replace(/-/g, "/") };
+      }
+
+      // 2️⃣ Try next line
+      if (lines[i + 1]) {
+        const nextLineMatch = lines[i + 1].match(dateRegex);
+        if (nextLineMatch) {
+          return { value: nextLineMatch[0].replace(/-/g, "/") };
+        }
+      }
+    }
+  }
+
+  return null;
+}
 
 
 //10th Logic
@@ -514,7 +713,6 @@ const extractTenthResultStatus = (text) => {
 
 
 // 12th Logic
-
 const extractTwelfthStudentName = (text) => {
   const anchors = [
     'THIS IS TO CERTIFY THAT',
@@ -555,7 +753,6 @@ const extractTwelfthStudentName = (text) => {
 
   return null;
 };
-
 
 const extractTwelfthSchoolName = (text) => {
   const lines = text
@@ -659,8 +856,6 @@ const extractTwelfthSchoolName = (text) => {
   return null;
 };
 
-
-
 const extractTwelfthPassingYear = (text) => {
   const upper = text.toUpperCase();
 
@@ -700,6 +895,75 @@ const extractTwelfthResultStatus = (text) => {
   if (upper.includes('FAIL')) return { value: 'FAIL' };
   return null;
 };
+
+// Passport
+function extractPassportGivenName(text) {
+  const lines = text
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const match = line.match(/\s*Given Name\(s\)\s*(.+)/i);
+    if (match) {
+      return { value: match[1].trim() };
+    }
+  }
+
+  return null;
+}
+
+function extractPassportDOB(text) {
+  const lines = text
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    // Match label (Hindi / English)
+    const match = line.match(/(?:जन्मतिथि|Date of Birth)[:\/]?\s*(\d{2}\/\d{2}\/\d{4})/i);
+    if (match) {
+      return { value: match[1].trim() };
+    }
+  }
+
+  // Fallback: Try MRZ extraction (YYMMDD -> convert)
+  const mrzLine = lines.find(l => /^P</.test(l));
+  if (mrzLine) {
+    const mrzDOB = mrzLine.slice(44, 50); // positions in MRZ
+    if (mrzDOB.match(/^\d{6}$/)) {
+      const yy = mrzDOB.slice(0, 2);
+      const mm = mrzDOB.slice(2, 4);
+      const dd = mrzDOB.slice(4, 6);
+
+      // Convert to DD/MM/YYYY (assume 1900–2099)
+      const year = parseInt(yy, 10) <= 30 ? `20${yy}` : `19${yy}`;
+      return { value: `${dd}/${mm}/${year}` };
+    }
+  }
+
+  return null;
+}
+
+function extractPassportNationality(text) {
+  const lines = text
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    // Match bilingual label
+    const match = line.match(/(?:राष्ट्रीयता|Nationality)[:\/]?\s*(?:[^\s\/]+\/\s*)?([A-Z]+)/i);
+    if (match) {
+      return { value: match[1].trim() };
+    }
+  }
+
+  return null;
+}
+
+
+
 
 
 
@@ -762,14 +1026,28 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
 
     if (detectedType === 'PAN') {
       const panNum = extractPAN(fullText);
+      const Name = extractPANName(fullText);
+      const DOB = extractPANDOB(fullText);
+      const FatherName = extractPANFatherName(fullText);
+
       result.panData = panNum || "";
+      result.panName = Name || "";
+      result.panDOB = DOB || "";
+      result.panFatherName = FatherName || "";
 
       result.isValid = true;
     }
 
     if (detectedType === 'AADHAAR') {
       const adharNum = extractAadhaar(fullText);
+      const name = extractAadhaarName(fullText);
+      const DOB = extractAadhaarDOB(fullText);
+      const address = extractAadhaarAddress(fullText);
+
       result.adhaarNumber = adharNum || "";
+      result.adhaarName = name || "";
+      result.adhaarDOB = DOB || "";
+      result.adhaarAddress = address || "";
 
       result.isValid = true;
     }
@@ -798,6 +1076,19 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       result.twelfthSchoolName = schoolName || "";
       result.twelfthResultStatus = resultStatus || "";
       result.twelfthPassingYear = passingYr || "";
+
+      result.isValid = true;
+    }
+
+    if (detectedType === 'PASSPORT') {
+
+      const name = extractPassportGivenName(fullText);
+      const DOB = extractPassportDOB(fullText);
+      const nationality = extractPassportNationality(fullText);
+
+      result.passportName = name || "";
+      result.passportDOB = DOB || "";
+      result.passportNationality = nationality|| "";
 
       result.isValid = true;
     }

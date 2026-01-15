@@ -18,8 +18,14 @@ function Home() {
   const [passingYearData, setPassingYearData] = useState(null);
 
   const [panData, setPanData] = useState(null);
+  const [panName, setPanName] = useState(null);
+  const [panDOB, setPanDOB] = useState(null);
+  const [panFatherName, setPanFatherName] = useState(null);
 
   const [adhaarNum, setAdhaarNum] = useState(null);
+  const [adhaarName, setAdhaarName] = useState(null);
+  const [adhaarDOB, setAdhaarDOB] = useState(null);
+  const [adhaarAddress, setAdhaarAddress] = useState(null);
 
   const [tenthStudentName, setTenthStudentName] = useState(null);
   const [tenthSchoolName, setTenthSchoolName] = useState(null);
@@ -30,6 +36,11 @@ function Home() {
   const [twelfthSchoolName, setTwelfthSchoolName] = useState(null);
   const [twelfthResultStatus, setTwelfthResultStatus] = useState(null);
   const [twelfthPassingYear, setTwelfthPassingYear] = useState(null);
+
+  const [passportName, setPassportName] = useState(null);
+  const [passportDOB, setPassportDOB] = useState(null);
+  const [passportNationality, setPassportNationality] = useState(null);
+
 
   const [loading, setLoading] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState("");
@@ -57,8 +68,14 @@ function Home() {
     setPassingYearData(null);
 
     setPanData(null);
+    setPanName(null);
+    setPanDOB(null);
+    setPanFatherName(null);
 
     setAdhaarNum(null);
+    setAdhaarName(null);
+    setAdhaarDOB(null);
+    setAdhaarAddress(null);
 
     setTengthPassingYear(null);
     setTenthSchoolName(null);
@@ -70,10 +87,12 @@ function Home() {
     setTwelfthResultStatus(null);
     setTwelfthPassingYear(null);
 
+    setPassportName(null);
+    setPassingYearData(null);
+    setPassportNationality(null);
+
     setRawText("");
   };
-
-
 
 
   /* ---------------- SUBMIT ---------------- */
@@ -111,8 +130,6 @@ function Home() {
       console.log(result);
 
 
-
-
       // ❌ Backend error
       if (!res.ok) {
         setError(result.error || "Something went wrong");
@@ -141,8 +158,14 @@ function Home() {
       setPassingYearData(result.passingYr || null);
 
       setPanData(result.panData || null);
+      setPanName(result.panName || null);
+      setPanDOB(result.panDOB || null);
+      setPanFatherName(result.panFatherName || null);
 
       setAdhaarNum(result.adhaarNumber || null);
+      setAdhaarName(result.adhaarName || null);
+      setAdhaarDOB(result.adhaarDOB || null);
+      setAdhaarAddress(result.adhaarAddress || null);
 
       setTenthStudentName(result.tenthStudentName || null);
       setTenthSchoolName(result.tenthSchoolName || null);
@@ -154,6 +177,10 @@ function Home() {
       setTwelfthResultStatus(result.twelfthResultStatus);
       setTwelfthPassingYear(result.twelfthPassingYear);
 
+      setPassportName(result.passportName);
+      setPassportDOB(result.passportDOB);
+      setPassportNationality(result.passportNationality);
+
 
       setSuccess("Document scanned successfully");
 
@@ -163,7 +190,6 @@ function Home() {
       setLoading(false);
     }
   };
-
 
   /* ---------------- UI ---------------- */
   return (
@@ -190,6 +216,8 @@ function Home() {
           <option value="MARKSHEET">Marksheet</option>
           <option value="TENTH_MARKSHEET">10th Marksheet</option>
           <option value="TWELFTH_MARKSHEET">12th Marksheet</option>
+          <option value="PASSPORT">PASSPORT</option>
+
         </select>
 
 
@@ -258,18 +286,71 @@ function Home() {
 
           {/* AADHAAR */}
           {documentType === "AADHAAR" && (
-            <div className="gpa-box highlight">
-              <div className="gpa-label">Aadhaar Number</div>
-              <p className="gpa-value">{adhaarNum?.value}</p>
-            </div>
+            <>
+              {adhaarNum && (
+                <div className="gpa-box highlight">
+                  <div className="gpa-label">Aadhaar Number</div>
+                  <p className="gpa-value">{adhaarNum?.value}</p>
+                </div>
+              )}
+
+              {adhaarName && (
+                <div className="gpa-box highlight">
+                  <div className="gpa-label">Name</div>
+                  <p className="gpa-value">{adhaarName?.value}</p>
+                </div>
+              )}
+
+              {adhaarDOB && (
+                <div className="gpa-box highlight">
+                  <div className="gpa-label">DOB</div>
+                  <p className="gpa-value">{adhaarDOB?.value}</p>
+                </div>
+              )}
+
+              {adhaarAddress && (
+                <div className="gpa-box highlight">
+                  <div className="gpa-label">Address</div>
+                  <p className="gpa-value">{adhaarAddress?.value}</p>
+                </div>
+              )}
+
+            </>
+
           )}
 
           {/* PAN */}
           {documentType === "PAN" && (
-            <div className="gpa-box highlight">
-              <div className="gpa-label">PAN Number</div>
-              <p className="gpa-value">{panData?.value}</p>
-            </div>
+            <>
+              {panData && (
+                <div className="gpa-box highlight">
+                  <div className="gpa-label">PAN Number</div>
+                  <p className="gpa-value">{panData?.value}</p>
+                </div>
+              )}
+
+              {panName && (
+                <div className="gpa-box highlight">
+                  <div className="gpa-label">Name</div>
+                  <p className="gpa-value">{panName?.value}</p>
+                </div>
+              )}
+
+              {panDOB && (
+                <div className="gpa-box highlight">
+                  <div className="gpa-label">DOB</div>
+                  <p className="gpa-value">{panDOB?.value}</p>
+                </div>
+              )}
+
+              {panFatherName && (
+                <div className="gpa-box highlight">
+                  <div className="gpa-label">Father's Name</div>
+                  <p className="gpa-value">{panFatherName?.value}</p>
+                </div>
+              )}
+
+            </>
           )}
 
           {/* MARKSHEET */}
@@ -387,6 +468,31 @@ function Home() {
                 <div className="gpa-box">
                   <div className="gpa-label">Result Status</div>
                   <p className="gpa-value">{twelfthResultStatus?.value}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {documentType === "PASSPORT" &&(
+            <>
+             {passportName && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Name</div>
+                  <p className="gpa-value">{passportName?.value}</p>
+                </div>
+              )}
+
+               {passportDOB && (
+                <div className="gpa-box">
+                  <div className="gpa-label">DOB</div>
+                  <p className="gpa-value">{passportDOB?.value}</p>
+                </div>
+              )}
+
+               {passportNationality && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Nationality</div>
+                  <p className="gpa-value">{passportNationality?.value}</p>
                 </div>
               )}
             </>
