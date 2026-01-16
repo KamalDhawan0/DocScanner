@@ -40,6 +40,11 @@ function Home() {
   const [passportName, setPassportName] = useState(null);
   const [passportDOB, setPassportDOB] = useState(null);
   const [passportNationality, setPassportNationality] = useState(null);
+  const [passportNumber, setPassportNumber] = useState(null);
+  const [passportIssueDate, setPassportIssueDate] = useState(null);
+  const [passportExpiryDate, setPassportExpiryDate] = useState(null);
+  const [passportPlaceOfBirth, setPassportPlaceOfBirth] = useState(null);
+  const [passportGender, setPassportGender] = useState(null);
 
 
   const [loading, setLoading] = useState(false);
@@ -90,6 +95,11 @@ function Home() {
     setPassportName(null);
     setPassingYearData(null);
     setPassportNationality(null);
+    setPassportIssueDate(null);
+    setPassportExpiryDate(null);
+    setPassportNumber(null);
+    setPassportGender(null);
+    setPassportPlaceOfBirth(null);
 
     setRawText("");
   };
@@ -136,12 +146,20 @@ function Home() {
         return;
       }
 
+
+
+
       // ❌ Document type mismatch
       if (!result.isValid && result.reason === "DOCUMENT_TYPE_MISMATCH") {
         setError(
           `Uploaded document is ${result.detectedType}, not ${selectedDocType}`
         );
         return;
+      }
+
+
+      if(result.data ===""){
+        setError("😅 Oops! We couldn’t process the document just now. Please try again shortly.");
       }
 
 
@@ -180,6 +198,11 @@ function Home() {
       setPassportName(result.passportName);
       setPassportDOB(result.passportDOB);
       setPassportNationality(result.passportNationality);
+      setPassportIssueDate(result.passportDateOfIssue);
+      setPassportExpiryDate(result.passportDateOfExpiry);
+      setPassportNumber(result.passportNumber);
+      setPassportGender(result.passportGender);
+      setPassportPlaceOfBirth(result.passportPlaceOfBirth);
 
 
       setSuccess("Document scanned successfully");
@@ -216,7 +239,7 @@ function Home() {
           <option value="MARKSHEET">Marksheet</option>
           <option value="TENTH_MARKSHEET">10th Marksheet</option>
           <option value="TWELFTH_MARKSHEET">12th Marksheet</option>
-          <option value="PASSPORT">PASSPORT</option>
+          <option value="PASSPORT">Passport</option>
 
         </select>
 
@@ -473,26 +496,61 @@ function Home() {
             </>
           )}
 
-          {documentType === "PASSPORT" &&(
+          {documentType === "PASSPORT" && (
             <>
-             {passportName && (
+              {passportName && (
                 <div className="gpa-box">
                   <div className="gpa-label">Name</div>
                   <p className="gpa-value">{passportName?.value}</p>
                 </div>
               )}
 
-               {passportDOB && (
+              {passportDOB && (
                 <div className="gpa-box">
-                  <div className="gpa-label">DOB</div>
+                  <div className="gpa-label">DOB (dd/mm/yyyy)</div>
                   <p className="gpa-value">{passportDOB?.value}</p>
                 </div>
               )}
 
-               {passportNationality && (
+              {passportNationality && (
                 <div className="gpa-box">
                   <div className="gpa-label">Nationality</div>
                   <p className="gpa-value">{passportNationality?.value}</p>
+                </div>
+              )}
+
+              {passportNumber && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Passport Number</div>
+                  <p className="gpa-value">{passportNumber?.value}</p>
+                </div>
+              )}
+
+              {passportIssueDate && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Issue Date</div>
+                  <p className="gpa-value">{passportIssueDate?.value}</p>
+                </div>
+              )}
+
+              {passportExpiryDate && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Expiry Date (dd/mm/yyyy)</div>
+                  <p className="gpa-value">{passportExpiryDate}</p>
+                </div>
+              )}
+
+              {passportPlaceOfBirth && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Place Of Birth</div>
+                  <p className="gpa-value">{passportPlaceOfBirth?.value}</p>
+                </div>
+              )}
+
+              {passportGender && (
+                <div className="gpa-box">
+                  <div className="gpa-label">Gender</div>
+                  <p className="gpa-value">{passportGender?.value}</p>
                 </div>
               )}
             </>

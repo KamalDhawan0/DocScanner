@@ -56,7 +56,7 @@ async function performOCR(filePath, isPDF = false) {
 
   formData.append('apikey', process.env.OCR_SPACE_API_KEY);
   formData.append('language', 'eng');
-  formData.append('OCREngine', '3');
+  formData.append('OCREngine', '2');
   formData.append('scale', 'true');
 
   // 🔥 REQUIRED FOR PDFS
@@ -79,7 +79,7 @@ async function performOCR(filePath, isPDF = false) {
 
     if (response.data.IsErroredOnProcessing) {
       console.error("OCR Space API Error:", response.data.ErrorMessage);
-      return "";
+      return response.data.ErrorMessage;
     }
 
     // 🔥 PDFs can return multiple pages
@@ -903,15 +903,33 @@ function extractPassportGivenName(text) {
     .map(l => l.trim())
     .filter(Boolean);
 
+  // ------------------ 1️⃣ MRZ PRIMARY ------------------
+  const mrzLines = lines.filter(l => l.startsWith("P<"));
+  if (mrzLines.length > 0) {
+    const line1 = mrzLines[0];
+
+    // Format: P<INDYADAV<<ANKIT<<<<<<<<<<<<
+    const parts = line1.substring(5).split("<<");
+    if (parts.length >= 2) {
+      const givenNames = parts[1]
+        .replace(/</g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (givenNames) return { value: givenNames };
+    }
+  }
+
+  // ------------------ 2️⃣ OCR FALLBACK ------------------
   for (const line of lines) {
-    const match = line.match(/\s*Given Name\(s\)\s*(.+)/i);
-    if (match) {
+    const match = line.match(/\bGiven Name\(s\)\s*(.+)/i);
+    if (match && match[1].trim()) {
       return { value: match[1].trim() };
     }
   }
 
   return null;
 }
+
 
 function extractPassportDOB(text) {
   const lines = text
@@ -919,31 +937,38 @@ function extractPassportDOB(text) {
     .map(l => l.trim())
     .filter(Boolean);
 
-  for (const line of lines) {
-    // Match label (Hindi / English)
-    const match = line.match(/(?:जन्मतिथि|Date of Birth)[:\/]?\s*(\d{2}\/\d{2}\/\d{4})/i);
-    if (match) {
-      return { value: match[1].trim() };
-    }
-  }
+  // // 1️⃣ OCR first
+  // for (const line of lines) {
+  //   const match = line.match(
+  //     /(?:Date\s*of\s*Birth)\s*[:\-\/]?\s*(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i
+  //   );
+  //   if (match) return { value: match[1] };
+  // }
 
-  // Fallback: Try MRZ extraction (YYMMDD -> convert)
-  const mrzLine = lines.find(l => /^P</.test(l));
-  if (mrzLine) {
-    const mrzDOB = mrzLine.slice(44, 50); // positions in MRZ
-    if (mrzDOB.match(/^\d{6}$/)) {
-      const yy = mrzDOB.slice(0, 2);
-      const mm = mrzDOB.slice(2, 4);
-      const dd = mrzDOB.slice(4, 6);
+  // Filter MRZ-like lines
+  // 1️⃣ Filter MRZ-like lines (long lines with lots of '<')
+  const mrzLines = lines.filter(l => l.includes("<") && l.length >= 40);
+  if (mrzLines.length < 2) return null;
 
-      // Convert to DD/MM/YYYY (assume 1900–2099)
-      const year = parseInt(yy, 10) <= 30 ? `20${yy}` : `19${yy}`;
-      return { value: `${dd}/${mm}/${year}` };
-    }
-  }
+  let line2 = mrzLines[1];
 
-  return null;
+  // 2️⃣ Clean line2: remove any non-MRZ characters (keep A-Z, 0-9, <)
+  line2 = line2.replace(/[^A-Z0-9<]/gi, "");
+
+  // 3️⃣ DOB is always 6 digits at positions 13-18 (0-indexed 12-17)
+  const dobRaw = line2.slice(12, 18); // YYMMDD
+  if (!/^\d{6}$/.test(dobRaw)) return null;
+
+  const yy = parseInt(dobRaw.slice(0, 2), 10);
+  const mm = dobRaw.slice(2, 4);
+  const dd = dobRaw.slice(4, 6);
+
+  // 4️⃣ Century inference
+  const year = yy <= 30 ? 2000 + yy : 1900 + yy;
+
+  return { value: `${dd}/${mm}/${year}` };
 }
+
 
 function extractPassportNationality(text) {
   const lines = text
@@ -951,18 +976,153 @@ function extractPassportNationality(text) {
     .map(l => l.trim())
     .filter(Boolean);
 
-  for (const line of lines) {
-    // Match bilingual label
-    const match = line.match(/(?:राष्ट्रीयता|Nationality)[:\/]?\s*(?:[^\s\/]+\/\s*)?([A-Z]+)/i);
-    if (match) {
-      return { value: match[1].trim() };
-    }
+  // 1️⃣ Filter MRZ-like lines (usually 44 chars, lots of '<', or start with P<)
+  const mrzLines = lines.filter(
+    l => l.includes("<") && l.length >= 40
+  );
+  if (mrzLines.length < 2) return null;
+
+  const line1 = mrzLines[0];
+  const line2 = mrzLines[1];
+
+  // 2️⃣ Try line 2 first (standard MRZ nationality position)
+  const matchLine2 = line2.match(/<\d?([A-Z]{3})\d{6}[MF]/);
+  if (matchLine2) return { value: matchLine2[1] };
+
+  // 3️⃣ Fallback: line 1 issuing country
+  if (line1.startsWith("P<") && line1.length >= 5) {
+    const issuingCountry = line1.slice(2, 5);
+    if (/^[A-Z]{3}$/.test(issuingCountry)) return { value: issuingCountry };
   }
 
   return null;
 }
 
 
+function extractPassportNumber(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+
+  // Fallback: MRZ line
+  const mrzMatch = text.match(/\b([A-Z][0-9]{7})<\d/);
+  if (mrzMatch) {
+    return { value: mrzMatch[1] };
+  }
+
+
+
+  for (let i = 0; i < lines.length; i++) {
+    if (/Passport\s*No/i.test(lines[i])) {
+      const nextLine = lines[i + 1];
+      if (nextLine && /^[A-Z][0-9]{7}$/.test(nextLine)) {
+        return { value: nextLine };
+      }
+    }
+  }
+
+
+
+  return null;
+}
+
+// function extractPassportDateOfIssue(text) {
+//   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+//   for (const line of lines) {
+//     const match = line.match(/Date of Issue\s*([0-9]{2}\/[0-9]{2}\/[0-9]{4})/i);
+//     if (match) {
+//       return { value: match[1] };
+//     }
+//   }
+
+//   return null;
+// }
+
+function inferExpiryYear(yy) {
+  const currentYear = new Date().getFullYear(); // e.g. 2026
+  const currentCentury = Math.floor(currentYear / 100) * 100;
+
+  let year = currentCentury + yy;
+
+  // If expiry year already passed, shift to next century
+  if (year < currentYear) {
+    year += 100;
+  }
+
+  return year;
+}
+
+function extractPassportDateOfExpiry(text) {
+const lines = text
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const mrzLines = lines.filter(l => l.includes("<") && l.length >= 40);
+  if (mrzLines.length < 2) return null;
+
+  let line2 = mrzLines[1].replace(/[^A-Z0-9<]/gi, "");
+
+  // Match DOB + Sex + Expiry
+  const match = line2.match(/\d{6}[MF](\d{6})/);
+  if (!match) return null;
+
+  const expiryRaw = match[1];
+
+  const yy = parseInt(expiryRaw.slice(0, 2), 10);
+  const mm = expiryRaw.slice(2, 4);
+  const dd = expiryRaw.slice(4, 6);
+
+  const year = inferExpiryYear(yy);
+
+  return `${dd}/${mm}/${year}`;
+}
+
+
+
+// function extractPassportPlaceOfBirth(text) {
+//   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+//   for (const line of lines) {
+//     const match = line.match(/Place of Birth\s*(.+)/i);
+//     if (match) {
+//       return { value: match[1].trim() };
+//     }
+//   }
+
+//   return null;
+// }
+
+function extractPassportSex(text) {
+  const lines = text
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+
+  //  1️⃣ MRZ 
+  const mrzLines = lines.filter(l => l.includes("<") && l.length >= 40);
+  if (mrzLines.length >= 2) {
+    const line2 = mrzLines.find(l => /\d{6}[MF]/.test(l));
+    if (line2) {
+      const match = line2.match(/\d{6}([MF])/);
+      if (match) return { value: match[1] === 'M' ? 'Male' : 'Female' };
+    }
+  }
+
+  //2️⃣ OCR-based fallback
+  for (const line of lines) {
+    const match = line.match(/\b(?:Sex|Gender)\s*[:\-]?\s*([MFmf])\b/);
+    if (match) {
+      const sexChar = match[1].toUpperCase();
+      return { value: sexChar === 'M' ? 'Male' : 'Female' };
+    }
+  }
+
+
+
+  return null;
+}
 
 
 
@@ -983,6 +1143,7 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
 
 
     console.log(`Extracted text length: ${fullText.length}`);
+
 
 
     const detectedType = detectDocumentType(fullText); // Value detected by server
@@ -1085,21 +1246,33 @@ app.post('/extracttextfromimage', upload.single('file'), async (req, res) => {
       const name = extractPassportGivenName(fullText);
       const DOB = extractPassportDOB(fullText);
       const nationality = extractPassportNationality(fullText);
+      const num = extractPassportNumber(fullText);
+      // const issued = extractPassportDateOfIssue(fullText);
+      const expireed = extractPassportDateOfExpiry(fullText);
+      // const place = extractPassportPlaceOfBirth(fullText);
+      const gender = extractPassportSex(fullText);
+
+
 
       result.passportName = name || "";
       result.passportDOB = DOB || "";
-      result.passportNationality = nationality|| "";
+      result.passportNationality = nationality || "";
+      result.passportNumber = num || "";
+      result.passportDateOfIssue = "";
+      result.passportDateOfExpiry = expireed || "";
+      result.passportPlaceOfBirth = "";
+      result.passportGender = gender || "";
 
       result.isValid = true;
     }
 
 
-    return res.json(result);
+      return res.json(result);
 
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 
 
 
